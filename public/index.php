@@ -2,6 +2,7 @@
 /**
  * public/index.php
  */
+require_once __DIR__ . '/../app/config/constants.php';
 ?>
 <!doctype html>
 <html lang="es">
@@ -234,8 +235,6 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 
 <script>
-  alert('JS cargado');
-  console.log('index.js cargado');
 // =======================================================
 // CONFIG
 // =======================================================
@@ -243,7 +242,7 @@ const API_DASHBOARD   = './api/dashboard.php';
 const API_ISSUES      = './api/issues.php';
 const API_SYNC        = './api/sync.php';
 const API_JIRA_UPDATE = './api/jira_update_issue.php';
-const JIRA_BROWSE_BASE = <?= json_encode(rtrim(env('JIRA_SITE', ''), '/') . '/browse/') ?>;
+const JIRA_BROWSE_BASE = <?= json_encode(rtrim(JIRA_SITE, '/') . '/browse/') ?>;
 
 const state = { limit:20, offset:0 };
 let issueEditModal;
