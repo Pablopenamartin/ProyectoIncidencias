@@ -185,6 +185,7 @@ require_once __DIR__ . '/../app/config/constants.php';
 </div>
 
 </div>
+</div>
 
 <!-- =======================================================
      MODAL EDICIÓN RÁPIDA
@@ -599,6 +600,5 @@ btnSaveIssueEdit.addEventListener('click', saveIssueEdit);
   }
 })();
 </script>
-</div>
 </body>
 </html>
