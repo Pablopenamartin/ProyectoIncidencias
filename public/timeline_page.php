@@ -4,6 +4,9 @@
  * -------------------------------------------------------
  * Timeline / Gantt de incidencias (vista de 12 horas).
  */
+require_once __DIR__ . '/../app/config/constants.php';
+// Carga las constantes del .env antes de renderizar el HTML/JS.
+// Esto evita el error por usar env()/
 ?>
 <!doctype html>
 <html lang="es">
@@ -196,10 +199,34 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 
 <script>
+// --------------------------------------------------
+// DOM ELEMENTS (declaración explícita)
+// --------------------------------------------------
+
+const dateFrom   = document.getElementById('dateFrom');
+const dateTo     = document.getElementById('dateTo');
+const btnApplyRange = document.getElementById('btnApplyRange');
+
+const btnPrev = document.getElementById('btnPrev');
+const btnNext = document.getElementById('btnNext');
+
+const timelineTable = document.getElementById('timelineTable');
+
+const editJiraKey   = document.getElementById('editJiraKey');
+const editSummary   = document.getElementById('editSummary');
+const editPriority  = document.getElementById('editPriority');
+const editAssignee  = document.getElementById('editAssignee');
+const editStatus    = document.getElementById('editStatus');
+const editModalInfo = document.getElementById('editModalInfo');
+const btnSaveIssueEdit = document.getElementById('btnSaveIssueEdit');
+
 const API = './api/timeline.php';
 const API_JIRA_UPDATE = './api/jira_update_issue.php';
 const SLOT_MINUTES = 15;
-const JIRA_BROWSE_BASE = '<?= rtrim(env('JIRA_SITE', ''), '/') ?>/browse/';
+
+const JIRA_BROWSE_BASE = <?= json_encode(rtrim(JIRA_SITE, '/') . '/browse/') ?>;
+// Genera un literal JavaScript válido usando la constante ya cargada desde
+
 
 const issueDetail      = document.getElementById('issueDetail');
 const issueTitle       = document.getElementById('issueTitle');
@@ -410,10 +437,19 @@ async function loadTimeline() {
   if (!(timeWindow.from instanceof Date) || isNaN(timeWindow.from.getTime())) return;
   if (!(timeWindow.to   instanceof Date) || isNaN(timeWindow.to.getTime())) return;
 
+  
+  const fmt = d =>
+    d.getFullYear() + '-' +
+    String(d.getMonth() + 1).padStart(2, '0') + '-' +
+    String(d.getDate()).padStart(2, '0') + ' ' +
+    String(d.getHours()).padStart(2, '0') + ':' +
+    String(d.getMinutes()).padStart(2, '0');
+
   const params = new URLSearchParams({
-    from: timeWindow.from.toISOString().slice(0,16).replace('T',' '),
-    to:   timeWindow.to.toISOString().slice(0,16).replace('T',' ')
+    from: fmt(timeWindow.from),
+    to:   fmt(timeWindow.to)
   });
+
 
   const res = await fetch(`${API}?${params}`);
   const json = await res.json();
@@ -489,7 +525,7 @@ async function loadTimeline() {
     });
 
     if (span > 0) closeBlock();
-    if (!hasVisibleBlock) return;
+    
 
     tr += '</tr>';
     tbody.innerHTML += tr;

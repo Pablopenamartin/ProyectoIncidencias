@@ -176,44 +176,32 @@ document.addEventListener('DOMContentLoaded', () => {
       <!-- Separador -->
       <li class="nav-item text-white-50">|</li>
 
-      <!-- VACÍO FUTURO -->
+      <!-- AI CONFIG -->
       <li class="nav-item">
-        <span class="nav-link text-white-50">(vacío)</span>
+        <a class="nav-link <?= $current === 'ai_config.php' ? 'active fw-bold' : '' ?>"
+           href="ai_config.php"
+           data-slide="left">
+          AI CONFIG
+        </a>
       </li>
 
-      <li class="nav-item text-white-50">|</li>
+        <!-- INFORMES -->
+      <li class="nav-item">
+        <a class="nav-link <?= $current === 'ai_reports_page.php' ? 'active fw-bold' : '' ?>"
+           href="ai_reports_page.php"
+           data-slide="left">
+          INFORMES
+        </a>
+      </li>
 
+
+      <li class="nav-item text-white-50">|</li>
+        <!-- VACÍO FUTURO -->
       <li class="nav-item">
         <span class="nav-link text-white-50">(vacío)</span>
       </li>
 
     </ul>
-
-    <!-- ACCIONES DERECHA -->
-    <div class="d-flex align-items-center gap-2">
-
-      <!-- Exportar -->
-      <div class="dropdown">
-        <button class="btn btn-outline-light btn-sm dropdown-toggle"
-                data-bs-toggle="dropdown">
-          Exportar
-        </button>
-
-        <ul class="dropdown-menu dropdown-menu-end">
-          <li>
-            <button class="dropdown-item" id="exportImage">
-              📸 Imagen
-            </button>
-          </li>
-          <li>
-            <button class="dropdown-item" id="exportExcel">
-              📊 Excel
-            </button>
-          </li>
-        </ul>
-      </div>
-
-    </div>
 
   </div>
 </nav>

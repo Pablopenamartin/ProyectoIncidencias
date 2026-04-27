@@ -383,22 +383,30 @@ class JiraIssueMutationService
     /**
      * Resuelve el priority_id real de Jira a partir del nivel interno 1..5.
      */
-    private function resolveJiraPriorityIdFromLevel(int $priorityLevel): ?string
-    {
-        $st = $this->pdo->prepare('SELECT jira_priority_name FROM priority_map WHERE prioridad_nivel = :lvl LIMIT 1');
-        $st->execute([':lvl' => $priorityLevel]);
-        $jiraPriorityName = $st->fetchColumn();
+    
+private function resolveJiraPriorityIdFromLevel(int $priorityLevel): ?string
+{
+    // Mapeo directo y explícito entre el nivel interno de la app
+    // y el nombre real de prioridad esperado por Jira.
+    // Esto evita depender de priority_map mientras esa tabla siga invertida.
+    $jiraPriorityName = match ($priorityLevel) {
+        1 => 'Highest', // P1 = Critical
+        2 => 'High',    // P2 = High
+        3 => 'Medium',  // P3 = Medium
+        4 => 'Low',     // P4 = Low
+        5 => 'Lowest',  // P5 = Lowest
+        default => throw new RuntimeException('Nivel de prioridad no válido.'),
+    };
 
-        if ($jiraPriorityName === false) {
-            throw new RuntimeException('No existe mapeo local de prioridad para el nivel indicado.');
+    // Jira trabaja realmente con IDs, así que buscamos el ID real
+    // a partir del nombre devuelto por la API de prioridades.
+    foreach ($this->getJiraPriorities() as $priority) {
+        if ((string)($priority['name'] ?? '') === $jiraPriorityName) {
+            $jiraPriorityId = (string)($priority['id'] ?? '');
+            return $jiraPriorityId !== '' ? $jiraPriorityId : null;
         }
+    }
 
-        $jiraPriorityName = (string)$jiraPriorityName;
-        foreach ($this->getJiraPriorities() as $priority) {
-            if ((string)($priority['name'] ?? '') === $jiraPriorityName) {
-                return (string)($priority['id'] ?? '');
-            }
-        }
 
         throw new RuntimeException('No se pudo resolver el priority_id real en Jira para la prioridad seleccionada.');
     }
