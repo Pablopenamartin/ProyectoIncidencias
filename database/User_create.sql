@@ -23,7 +23,7 @@ INSERT INTO users (
     is_active
 ) VALUES
 (
-    'admin@dxc.com', //correo de la empresa
+    'admin@dxc.com', 
     '$2y$10$CXkdmeDPK.zLwSlZ3ZhXSOzeUrqa3Fiqdd54sX/u36HogIghRTb5u',
     'Administrador',
     'admin',

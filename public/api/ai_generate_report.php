@@ -9,6 +9,9 @@
 require_once __DIR__ . '/../../app/config/constants.php';
 require_once __DIR__ . '/../../app/helpers/Utils.php';
 require_once __DIR__ . '/../../app/services/AiAnalysisService.php';
+require_once __DIR__ . '/../../app/helpers/Auth.php';
+auth_require_api_role('admin');
+// Solo admin puede generar informes IA manualmente.
 
 header('Content-Type: application/json; charset=utf-8');
 

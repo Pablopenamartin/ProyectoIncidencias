@@ -8,6 +8,19 @@
  * - Navegación central escalable
  * - Acción Exportar a la derecha
  */
+require_once __DIR__ . '/../../app/helpers/Auth.php';
+auth_boot();
+
+// Usuario logado actual
+$user = auth_user();
+$current = basename($_SERVER['PHP_SELF']);
+
+$isAdmin = auth_is_admin();
+$isOperator = auth_is_operator();
+
+// Home dinámico según rol
+$homeHref = auth_home_path();
+$displayName = $user['display_name'] ?? 'Usuario';
 
 // Detectar página activa (simple)
 $current = basename($_SERVER['PHP_SELF']);
@@ -145,9 +158,11 @@ document.addEventListener('DOMContentLoaded', () => {
 <nav class="navbar navbar-expand-lg navbar-dark bg-primary px-3">
 
   <!-- LOGO / HOME -->
-    <a href="index.php" class="navbar-brand navbar-brand-dxc" data-slide="right">
+  <a href="<?= htmlspecialchars($homeHref, ENT_QUOTES, 'UTF-8') ?>"
+    class="navbar-brand navbar-brand-dxc"
+    data-slide="right">
     DXC
-    </a>
+  </a>
 
 
   <!-- Expansión responsive -->
@@ -161,47 +176,74 @@ document.addEventListener('DOMContentLoaded', () => {
   <!-- CONTENIDO CENTRAL -->
   <div class="collapse navbar-collapse" id="mainNavbar">
 
-    <!-- Navegación principal -->
+    <!-- Navegación principal: else if admin / operador -->
     <ul class="navbar-nav mx-auto align-items-center gap-3">
 
-      <!-- TIMELINE -->
-      <li class="nav-item">
-        <a class="nav-link <?= $current === 'timeline_page.php' ? 'active fw-bold' : '' ?>"
-           href="timeline_page.php"
-           data-slide="left">
-          TIMELINE
-        </a>
-      </li>
+      <?php if ($isAdmin): ?>
+        <!-- TIMELINE -->
+        <li class="nav-item">
+          <a class="nav-link <?= $current === 'timeline_page.php' ? 'active fw-bold' : '' ?>"
+            href="timeline_page.php"
+            data-slide="left">
+            TIMELINE
+          </a>
+        </li>
 
-      <!-- Separador -->
-      <li class="nav-item text-white-50">|</li>
+        <li class="nav-item text-white-50">|</li>
 
-      <!-- AI CONFIG -->
-      <li class="nav-item">
-        <a class="nav-link <?= $current === 'ai_config.php' ? 'active fw-bold' : '' ?>"
-           href="ai_config.php"
-           data-slide="left">
-          AI CONFIG
-        </a>
-      </li>
+        <!-- CONF IA -->
+        <li class="nav-item">
+          <a class="nav-link <?= $current === 'ai_config.php' ? 'active fw-bold' : '' ?>"
+            href="ai_config.php"
+            data-slide="left">
+            CONF IA
+          </a>
+        </li>
+
+        <li class="nav-item text-white-50">|</li>
 
         <!-- INFORMES -->
-      <li class="nav-item">
-        <a class="nav-link <?= $current === 'ai_reports_page.php' ? 'active fw-bold' : '' ?>"
-           href="ai_reports_page.php"
-           data-slide="left">
-          INFORMES
-        </a>
-      </li>
+        <li class="nav-item">
+          <a class="nav-link <?= $current === 'ai_reports_page.php' ? 'active fw-bold' : '' ?>"
+            href="ai_reports_page.php"
+            data-slide="left">
+            INFORMES
+          </a>
+        </li>
 
+        <li class="nav-item text-white-50">|</li>
 
-      <li class="nav-item text-white-50">|</li>
-        <!-- VACÍO FUTURO -->
-      <li class="nav-item">
-        <span class="nav-link text-white-50">(vacío)</span>
-      </li>
+        <!-- ALERTAS -->
+        <li class="nav-item">
+          <a class="nav-link <?= $current === 'ai_alerts_page.php' ? 'active fw-bold' : '' ?>"
+            href="ai_alerts_page.php"
+            data-slide="left">
+            ALERTAS
+          </a>
+        </li>
+
+      <?php elseif ($isOperator): ?>
+        <!-- ALERTAS -->
+        <li class="nav-item">
+          <a class="nav-link <?= $current === 'ai_alerts_page.php' ? 'active fw-bold' : '' ?>"
+            href="ai_alerts_page.php"
+            data-slide="left">
+            ALERTAS
+          </a>
+        </li>
+      <?php endif; ?>
 
     </ul>
+  </div>
+  
+  <div class="d-flex align-items-center gap-2">
+    <span class="text-white small">
+      <?= htmlspecialchars($displayName, ENT_QUOTES, 'UTF-8') ?>
+    </span>
+    <a href="logout.php" class="btn btn-outline-light btn-sm">
+      Logout
+    </a>
 
   </div>
+
 </nav>
