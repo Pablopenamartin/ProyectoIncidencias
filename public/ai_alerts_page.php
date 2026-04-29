@@ -26,10 +26,7 @@ $jiraBrowseBase = rtrim((string)JIRA_SITE, '/') . '/browse/';
     <title>Alertas</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
 
-    <link
-        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"
-        rel="stylesheet"
-    >
+     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
 
     <style>
         body { background: #f8f9fa; }
@@ -82,8 +79,8 @@ $jiraBrowseBase = rtrim((string)JIRA_SITE, '/') . '/browse/';
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    
     <script>
         // ======================================================
         // CONFIG
@@ -178,12 +175,14 @@ $jiraBrowseBase = rtrim((string)JIRA_SITE, '/') . '/browse/';
 
                             <div class="d-flex align-items-center gap-2 flex-wrap">
                                 ${scoreBadge(item.score)}
-                                <a
-                                    href="${escapeHtml(jiraUrl)}"
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    class="btn btn-sm btn-outline-secondary"
-                                                  Coger incidencia
+                                ${escapeHtml(jiraUrl)}
+                                    Abrir en Jira
+                                </a>
+                                <button
+                                    class="btn btn-sm btn-primary btn-claim-alert"
+                                    data-key="${escapeHtml(item.jira_key)}"
+                                >
+                                    Coger incidencia
                                 </button>
                             </div>
                         </div>

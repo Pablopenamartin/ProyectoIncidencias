@@ -222,6 +222,19 @@ document.addEventListener('DOMContentLoaded', () => {
           </a>
         </li>
 
+        
+        <li class="nav-item text-white-50">|</li>
+
+        <!-- USUARIOS -->
+        <li class="nav-item">
+          <a class="nav-link <?= $current === 'admin_users_page.php' ? 'active fw-bold' : '' ?>"
+            href="admin_users_page.php"
+            data-slide="left">
+            USUARIOS
+          </a>
+        </li>
+
+
       <?php elseif ($isOperator): ?>
         <!-- ALERTAS -->
         <li class="nav-item">
