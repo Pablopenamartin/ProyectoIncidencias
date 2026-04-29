@@ -1,26 +1,31 @@
 <?php
 /**
- * public/api/ai_reports.php
- * ------------------------------------------------------------------
+ * public/api/alerts.php
+ * =========================================================
  * FUNCIÓN GENERAL DEL ARCHIVO:
- * Endpoint para listar informes IA generados.
+ * Endpoint para obtener las alertas críticas sin asignar.
  *
  * RELACIÓN CON OTROS ARCHIVOS:
  * - Usa app/models/AiReportModel.php
- * - Será consumido por la futura pantalla "Informes"
+ * - Usa app/helpers/Auth.php para proteger acceso por rol
  *
  * FUNCIONES PRINCIPALES:
- * - GET -> devuelve listado de informes ordenados por fecha descendente
+ * - GET -> devuelve últimas incidencias críticas sin asignar
+ *
+ * ACCESO:
+ * - admin
+ * - operador
  */
 
 require_once __DIR__ . '/../../app/config/constants.php';
 require_once __DIR__ . '/../../app/helpers/Utils.php';
-require_once __DIR__ . '/../../app/models/AiReportModel.php';
 require_once __DIR__ . '/../../app/helpers/Auth.php';
-auth_require_api_role('admin');
-// Solo admin puede consultar el listado de informes IA.
+require_once __DIR__ . '/../../app/models/AiReportModel.php';
 
 header('Content-Type: application/json; charset=utf-8');
+
+// Permitimos acceso tanto a admin como a operador.
+auth_require_api_role(['admin', 'operador']);
 
 try {
     $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
@@ -32,11 +37,10 @@ try {
         ], 405);
     }
 
-    // Límite opcional para el listado
-    $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 50;
+    $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 100;
 
     $model = new AiReportModel();
-    $rows = $model->getReportsList($limit);
+    $rows = $model->getLatestCriticalUnassignedAlerts($limit);
 
     json_response([
         'ok'    => true,
@@ -47,6 +51,6 @@ try {
 } catch (Throwable $t) {
     json_response([
         'ok'    => false,
-        'error' => APP_DEBUG ? $t->getMessage() : 'Error obteniendo el listado de informes IA.',
+        'error' => APP_DEBUG ? $t->getMessage() : 'Error obteniendo las alertas críticas.',
     ], 500);
 }

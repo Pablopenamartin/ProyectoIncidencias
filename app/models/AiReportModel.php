@@ -304,5 +304,84 @@ class AiReportModel
         return $st->fetchAll() ?: [];
     }
 
+    /**
+     * getLatestCriticalUnassignedAlerts
+     * --------------------------------------------------------------
+     * Devuelve solo las últimas incidencias críticas sin asignar.
+     *
+     * REGLA DE NEGOCIO:
+     * - Se toma la última evaluación IA por jira_key
+     * - Solo se incluyen las marcadas como críticas
+     * - Solo se incluyen incidencias visibles actualmente
+     * - Solo se incluyen incidencias sin asignar actualmente
+     *
+     * CÓMO FUNCIONA:
+     * - latest: obtiene el último report_id por jira_key
+     * - ari: recupera el análisis IA de esa última evaluación
+     * - i: cruza con la tabla issues para leer el estado actual real
+     * - ar: recupera datos del informe origen
+     *
+     * @param int $limit Límite máximo de alertas
+     * @return array
+     */
+    public function getLatestCriticalUnassignedAlerts(int $limit = 100): array
+    {
+        $limit = max(1, min(500, $limit));
+
+        $sql = "
+            SELECT
+                ari.id,
+                ari.report_id,
+                ari.jira_key,
+                i.summary,
+                i.status_name AS current_status,
+                i.priority_name AS current_priority,
+                i.prioridad_nivel,
+                ari.is_critical,
+                ari.critical_reason,
+                ari.recommended_action,
+                ari.analysis_text,
+                ari.score,
+                ar.report_name,
+                ar.created_at AS report_created_at
+            FROM ai_report_issues ari
+
+            INNER JOIN (
+                SELECT
+                    jira_key,
+                    MAX(report_id) AS last_report_id
+                FROM ai_report_issues
+                GROUP BY jira_key
+            ) latest
+                ON latest.jira_key = ari.jira_key
+               AND latest.last_report_id = ari.report_id
+
+            INNER JOIN ai_reports ar
+                ON ar.id = ari.report_id
+
+            
+            INNER JOIN issues i
+                ON i.jira_key COLLATE utf8mb4_unicode_ci = ari.jira_key COLLATE utf8mb4_unicode_ci
+
+
+            WHERE
+                ari.is_critical = 1
+                AND i.visible = 1
+                AND (
+                    i.assignee_account_id IS NULL
+                    OR i.assignee_account_id = ''
+                )
+
+            ORDER BY
+                ar.created_at DESC,
+                ari.score DESC,
+                ari.jira_key ASC
+
+            LIMIT {$limit}
+        ";
+
+        return $this->pdo->query($sql)->fetchAll() ?: [];
+    }
+
 
 }

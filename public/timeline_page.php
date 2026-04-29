@@ -7,6 +7,9 @@
 require_once __DIR__ . '/../app/config/constants.php';
 // Carga las constantes del .env antes de renderizar el HTML/JS.
 // Esto evita el error por usar env()/
+require_once __DIR__ . '/../app/helpers/Auth.php';
+auth_require_role('admin');
+// Solo admin puede acceder a la timeline.
 ?>
 <!doctype html>
 <html lang="es">

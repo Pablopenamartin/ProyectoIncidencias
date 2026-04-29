@@ -16,6 +16,9 @@
  * - Permitir generar un informe IA manual.
  * - Al hacer click en un informe, desplegar su detalle.
  */
+require_once __DIR__ . '/../app/helpers/Auth.php';
+auth_require_role('admin');
+// Solo admin puede acceder a la pantalla de informes IA.
 ?>
 <!doctype html>
 <html lang="es">
