@@ -3,30 +3,50 @@
  * app/models/UserModel.php
  * =========================================================
  * FUNCIÓN GENERAL DEL ARCHIVO:
- * Modelo encargado de gestionar usuarios locales de la aplicación.
+ * Este modelo gestiona los usuarios locales de la aplicación.
  *
  * RELACIÓN CON OTROS ARCHIVOS:
- * - Usa app/config/database.php para reutilizar PDO.
- * - Será usado por el backend de alta de usuarios.
+ * - Usa app/config/database.php para reutilizar la conexión PDO.
+ * - Será usado por el servicio de alta de usuarios en Jira y por el login.
  *
  * FUNCIONES PRINCIPALES:
- * - findByUsername(): busca usuario local por username.
- * - createUser(): inserta un usuario local ya validado.
+ * - findByUsername(): busca un usuario por username/email.
+ * - createUser(): inserta un usuario nuevo en la tabla users.
  */
 
 require_once __DIR__ . '/../config/database.php';
 
 class UserModel
 {
+    /**
+     * Conexión PDO reutilizable del sistema.
+     */
     private PDO $pdo;
 
+    /**
+     * __construct
+     * --------------------------------------------------------------
+     * Inicializa el modelo reutilizando la conexión PDO global.
+     *
+     * @param PDO|null $pdo Conexión inyectada opcional
+     */
     public function __construct(?PDO $pdo = null)
     {
         $this->pdo = $pdo instanceof PDO ? $pdo : getPDO();
     }
 
     /**
-     * Busca un usuario local por username.
+     * findByUsername
+     * --------------------------------------------------------------
+     * Busca un usuario local por username/email.
+     *
+     * QUÉ HACE:
+     * - Consulta la tabla users
+     * - Busca coincidencia exacta por username
+     * - Devuelve la fila completa si existe
+     *
+     * @param string $username Email/username del usuario
+     * @return array|null Datos del usuario o null si no existe
      */
     public function findByUsername(string $username): ?array
     {
@@ -47,14 +67,27 @@ class UserModel
         ";
 
         $st = $this->pdo->prepare($sql);
-        $st->execute([':username' => $username]);
+        $st->execute([
+            ':username' => $username
+        ]);
 
         $row = $st->fetch();
+
         return $row ?: null;
     }
 
     /**
-     * Inserta un usuario local ya validado.
+     * createUser
+     * --------------------------------------------------------------
+     * Inserta un usuario nuevo en la tabla users.
+     *
+     * QUÉ HACE:
+     * - Guarda username, password hash, nombre visible, rol y accountId de Jira
+     * - Guarda también si el usuario está activo
+     * - Devuelve el ID insertado
+     *
+     * @param array $data Datos del usuario ya validados
+     * @return int ID del nuevo usuario insertado
      */
     public function createUser(array $data): int
     {
