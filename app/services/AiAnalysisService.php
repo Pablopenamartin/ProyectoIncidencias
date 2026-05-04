@@ -15,6 +15,8 @@ require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../models/AiSettingsModel.php';
 require_once __DIR__ . '/../models/AiReportModel.php';
 require_once __DIR__ . '/OpenAiProviderService.php';
+require_once __DIR__ . '/AlertNotificationsService.php';
+// Servicio que detecta alertas nuevas y envía notificaciones por Teams y correo.
 
 class AiAnalysisService
 {
@@ -72,7 +74,18 @@ class AiAnalysisService
 
             $this->reports->saveIssueAnalyses($reportId, $normalized);
 
-            return ['report_id' => $reportId, 'critical' => $criticalCount];
+            // Notificar nuevas alertas críticas:
+            // - correo a todos los usuarios activos
+            // - mensaje al canal de Teams
+            // - registro en alert_notifications para evitar duplicados
+            $alertNotifier = new AlertNotificationService($this->pdo);
+            $notificationResult = $alertNotifier->notifyNewAlertsForReport($reportId);
+
+            return [
+                'report_id'      => $reportId,
+                'critical'       => $criticalCount,
+                'notifications'  => $notificationResult,
+            ];
 
         } catch (Throwable $t) {
             $this->reports->markFailed($reportId, $t->getMessage());
