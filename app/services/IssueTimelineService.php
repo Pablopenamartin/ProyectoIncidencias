@@ -327,6 +327,79 @@ class IssueTimelineService
 
     /**
      * -----------------------------------------------------------------
+     * storeDeletedIssuesAsClosed
+     * -----------------------------------------------------------------
+     * Registra en issue_timeline las incidencias que han desaparecido de Jira
+     * y que el sistema ha marcado como cerradas/completadas en la tabla issues.
+     *
+     * QUÉ HACE:
+     * - recibe las filas visibles capturadas ANTES de la sync
+     * - crea un evento timeline por cada incidencia borrada en Jira
+     * - fuerza el estado final a:
+     *   - status_name = Completado
+     *   - estado_categoria = cerrado_unificado
+     * - usa:
+     *   - event_type = status_change
+     *   - source = system
+     *
+     * IMPORTANTE:
+     * - snapshot_id se guarda como NULL porque este evento no depende
+     *   del snapshot agregado, sino de una reconciliación de borrado
+     * - el método no consulta la tabla issues, trabaja con la foto previa
+     *   recibida desde SyncService
+     *
+     * @param string $snapshotTime Fecha/hora de la sync
+     * @param array  $deletedIssues Filas previas de incidencias borradas en Jira
+     * @return int Número de eventos insertados
+     */
+    public function storeDeletedIssuesAsClosed(
+        string $snapshotTime,
+        array $deletedIssues
+    ): int {
+        if (empty($deletedIssues)) {
+            return 0;
+        }
+
+        $stmt = $this->pdo->prepare($this->getInsertSql());
+        $inserted = 0;
+
+        $this->pdo->beginTransaction();
+
+        try {
+            foreach ($deletedIssues as $issue) {
+                /**
+                 * Construimos una copia del issue previo y forzamos
+                 * el estado final que queremos reflejar en timeline.
+                 */
+                $timelineIssue = $issue;
+
+                $timelineIssue['status_name'] = 'Completado';
+                $timelineIssue['estado_categoria'] = 'cerrado_unificado';
+
+                $this->insertTimelineEvent(
+                    $stmt,
+                    $timelineIssue,
+                    null,              // snapshot_id nullable en el modelo nuevo
+                    $snapshotTime,
+                    'status_change',   // mismo tipo de evento que un cierre/cambio de estado
+                    'system'           // lo hace el sistema por reconciliación
+                );
+
+                $inserted++;
+            }
+
+            $this->pdo->commit();
+            return $inserted;
+
+        } catch (Throwable $t) {
+            $this->pdo->rollBack();
+            throw $t;
+        }
+    }
+
+
+    /**
+     * -----------------------------------------------------------------
      * PREPARADO PARA WEBHOOKS FUTUROS
      * -----------------------------------------------------------------
      * Inserta un evento puntual ya enriquecido por otro servicio.
