@@ -26,7 +26,20 @@ class SnapshotService
 
     public function createSnapshot(): int
     {
-        $sql = "SELECT status_name, prioridad_nivel FROM issues WHERE visible = 1";
+        // Leemos:
+        // - incidencias visibles (abiertas / activas)
+        // - incidencias cerradas automáticamente (cerrado_unificado), aunque visible = 0
+        $sql = "
+            SELECT
+                status_name,
+                estado_categoria,
+                prioridad_nivel,
+                visible
+            FROM issues
+            WHERE visible = 1
+               OR estado_categoria = 'cerrado_unificado'
+        ";
+
         $rows = $this->pdo->query($sql)->fetchAll();
 
         $est = [
@@ -44,10 +57,24 @@ class SnapshotService
         $prio = [1=>0,2=>0,3=>0,4=>0,5=>0];
 
         foreach ($rows as $row) {
-            $s = strtolower(trim($row['status_name']));
+            
+            $s = strtolower(trim((string)$row['status_name']));
+            $cat = strtolower(trim((string)($row['estado_categoria'] ?? '')));
             $p = (int)$row['prioridad_nivel'];
+            $isVisible = (int)($row['visible'] ?? 0) === 1;
 
-            if (isset($prio[$p])) $prio[$p]++;
+            // Las prioridades del panel deben seguir contando solo tickets abiertos / visibles
+            if ($isVisible && isset($prio[$p])) {
+                $prio[$p]++;
+            }
+
+            // Si la incidencia ya está en la categoría unificada de cerrados,
+            // forzamos su conteo en CERRADOS aunque visible = 0.
+            if ($cat === 'cerrado_unificado') {
+                $est['cerrado_unificado']++;
+                continue;
+            }
+
 
             switch ($s) {
                 case 'open':
@@ -77,6 +104,7 @@ class SnapshotService
                 case 'cancelled':
                 case 'canceled':
                 case 'completed':
+                case 'completado':
                     $est['cerrado_unificado']++; break;
 
                 default:
