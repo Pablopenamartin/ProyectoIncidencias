@@ -3,18 +3,25 @@
  * public/admin_users_page.php
  * =========================================================
  * FUNCIÓN GENERAL DEL ARCHIVO:
- * Pantalla admin para crear usuarios y ver usuarios locales existentes.
+ * Pantalla admin para:
+ * - crear usuarios
+ * - listar usuarios activos
+ * - mostrar/ocultar usuarios inactivos
+ * - abrir modal de detalle/edición de usuario
  *
  * RELACIÓN CON OTROS ARCHIVOS:
  * - Usa Auth.php para permitir acceso solo admin.
  * - Usa admin_users.php para listar usuarios.
  * - Usa admin_create_user.php para crear usuarios.
+ * - Usa admin_update_user.php para editar nombre, rol y activo/inactivo.
  * - Incluye navbar.php para la navegación común.
  *
  * FUNCIONES PRINCIPALES:
  * - Mostrar formulario de alta de usuario
- * - Mostrar listado de usuarios locales
- * - Crear usuario en Jira + app mediante backend
+ * - Mostrar tabla limpia de usuarios activos
+ * - Mostrar tabla de inactivos bajo demanda
+ * - Abrir modal de detalle + edición
+ * - Guardar cambios de usuario
  */
 
 require_once __DIR__ . '/../app/config/constants.php';
@@ -33,9 +40,75 @@ auth_require_role('admin');
 
     <style>
         body { background: #f8f9fa; }
-        .page-wrap { max-width: 1200px; margin: 0 auto; }
-        .status-box { min-height: 24px; }
-        .table td, .table th { vertical-align: middle; }
+
+        .page-wrap {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .status-box {
+            min-height: 24px;
+        }
+
+        .table td,
+        .table th {
+            vertical-align: middle;
+        }
+
+        .role-badge {
+            font-size: .78rem;
+            font-weight: 600;
+            text-transform: lowercase;
+        }
+
+        .user-menu-btn {
+            border: 0;
+            background: transparent;
+            font-size: 1.35rem;
+            line-height: 1;
+            padding: .1rem .4rem;
+            color: #495057;
+        }
+
+        .user-menu-btn:hover {
+            color: #0d6efd;
+        }
+
+        .inactive-section {
+            display: none;
+        }
+
+        .inactive-section.visible {
+            display: block;
+        }
+
+        .employee-photo-box {
+            width: 120px;
+            height: 150px;
+            border: 1px solid #ced4da;
+            border-radius: .5rem;
+            background: #f1f3f5;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .employee-photo-placeholder {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            font-weight: 700;
+            color: #6c757d;
+            background: linear-gradient(135deg, #eef2f7, #dde5ee);
+        }
+
+        .modal-readonly {
+            background-color: #f8f9fa;
+        }
     </style>
 </head>
 <body>
@@ -54,7 +127,7 @@ auth_require_role('admin');
                 </div>
 
                 <div class="row g-4">
-                    <!-- Formulario -->
+                    <!-- Formulario de alta -->
                     <div class="col-12 col-lg-5">
                         <div class="card shadow-sm">
                             <div class="card-body">
@@ -64,13 +137,18 @@ auth_require_role('admin');
 
                                 <form id="createUserForm" novalidate>
                                     <div class="mb-3">
-                                        <label for="username" class="form-label">Email / username</label>
+                                        <label for="username" class="form-label">Email</label>
                                         <input type="email" id="username" class="form-control" required>
                                     </div>
 
                                     <div class="mb-3">
                                         <label for="password" class="form-label">Contraseña</label>
                                         <input type="password" id="password" class="form-control" required>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label for="repeatPassword" class="form-label">Repetir contraseña</label>
+                                        <input type="password" id="repeatPassword" class="form-control" required>
                                     </div>
 
                                     <div class="mb-3">
@@ -116,25 +194,55 @@ auth_require_role('admin');
 
                                 <div id="usersListStatus" class="status-box small text-muted mb-3"></div>
 
-                                <div class="table-responsive">
+                                <!-- Tabla activos -->
+                                <div class="table-responsive mb-3">
                                     <table class="table table-sm table-bordered bg-white">
                                         <thead class="table-light">
                                             <tr>
-                                                <th>ID</th>
-                                                <th>Username</th>
+                                                <th>Email</th>
                                                 <th>Nombre</th>
                                                 <th>Rol</th>
-                                                <th>Jira account ID</th>
-                                                <th>Activo</th>
+                                                <th class="text-center" style="width: 48px;"></th>
                                             </tr>
                                         </thead>
                                         <tbody id="usersRows">
                                             <tr>
-                                                <td colspan="6" class="text-center text-muted">Cargando...</td>
+                                                <td colspan="4" class="text-center text-muted">Cargando...</td>
                                             </tr>
                                         </tbody>
                                     </table>
                                 </div>
+
+                                <!-- Toggle inactivos -->
+                                <div class="mb-3">
+                                    <button type="button" id="btnToggleInactiveUsers" class="btn btn-sm btn-outline-secondary d-none">
+                                        Mostrar usuarios inactivos
+                                    </button>
+                                </div>
+
+                                <!-- Tabla inactivos -->
+                                <div id="inactiveSection" class="inactive-section">
+                                    <h3 class="h6 mb-2">Usuarios inactivos</h3>
+
+                                    <div class="table-responsive">
+                                        <table class="table table-sm table-bordered bg-white">
+                                            <thead class="table-light">
+                                                <tr>
+                                                    <th>Email</th>
+                                                    <th>Nombre</th>
+                                                    <th>Rol</th>
+                                                    <th class="text-center" style="width: 48px;"></th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="inactiveUsersRows">
+                                                <tr>
+                                                    <td colspan="4" class="text-center text-muted">No hay usuarios inactivos</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+
                             </div>
                         </div>
                     </div>
@@ -144,32 +252,161 @@ auth_require_role('admin');
         </div>
     </div>
 
+    <!-- =======================================================
+         MODAL DETALLE / EDICIÓN DE USUARIO
+    ======================================================== -->
+    <div class="modal fade" id="userEditModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Detalle de usuario</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+
+                <div class="modal-body">
+                    <input type="hidden" id="editUserId">
+
+                    <div id="userEditStatus" class="status-box small text-muted mb-3"></div>
+
+                    <div class="row g-4">
+                        <!-- Foto placeholder -->
+                        <div class="col-12 col-md-4">
+                            <div class="employee-photo-box">
+                                <div id="employeePhotoPlaceholder" class="employee-photo-placeholder">
+                                    --
+                                </div>
+                            </div>
+                            <div class="small text-muted mt-2">
+                                Foto de empleado (placeholder)
+                            </div>
+                        </div>
+
+                        <!-- Datos -->
+                        <div class="col-12 col-md-8">
+                            <div class="row g-3">
+                                <div class="col-12">
+                                    <label for="editUserEmail" class="form-label">Email</label>
+                                    <input type="text" id="editUserEmail" class="form-control modal-readonly" readonly>
+                                </div>
+
+                                <div class="col-12">
+                                    <label for="editUserDisplayName" class="form-label">Nombre</label>
+                                    <input type="text" id="editUserDisplayName" class="form-control">
+                                </div>
+
+                                <div class="col-12 col-md-6">
+                                    <label for="editUserRole" class="form-label">Rol</label>
+                                    <select id="editUserRole" class="form-select">
+                                        <option value="operador">operador</option>
+                                        <option value="admin">admin</option>
+                                    </select>
+                                </div>
+
+                                <div class="col-12 col-md-6">
+                                    <label class="form-label d-block">Estado</label>
+                                    <div class="form-check form-switch mt-2">
+                                        <input class="form-check-input" type="checkbox" id="editUserIsActive">
+                                        <label class="form-check-label" for="editUserIsActive">
+                                            Usuario activo
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div class="col-12">
+                                    <label for="editUserJiraAccountId" class="form-label">Jira account ID</label>
+                                    <input type="text" id="editUserJiraAccountId" class="form-control modal-readonly" readonly>
+                                </div>
+
+                                <div class="col-12 col-md-6">
+                                    <label for="editUserCreatedAt" class="form-label">Creado</label>
+                                    <input type="text" id="editUserCreatedAt" class="form-control modal-readonly" readonly>
+                                </div>
+
+                                <div class="col-12 col-md-6">
+                                    <label for="editUserUpdatedAt" class="form-label">Actualizado</label>
+                                    <input type="text" id="editUserUpdatedAt" class="form-control modal-readonly" readonly>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+                        Cancelar
+                    </button>
+                    <button type="button" class="btn btn-primary" id="btnSaveUserEdit">
+                        Guardar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 
     <script>
         /**
+         * ======================================================
          * CONFIG
+         * ======================================================
          */
         const API_CREATE_USER = './api/admin_create_user.php';
         const API_USERS       = './api/admin_users.php';
+        const API_UPDATE_USER = './api/admin_update_user.php';
 
         /**
+         * ======================================================
          * DOM
+         * ======================================================
          */
-        const createUserForm  = document.getElementById('createUserForm');
-        const username        = document.getElementById('username');
-        const password        = document.getElementById('password');
-        const displayName     = document.getElementById('displayName');
-        const role            = document.getElementById('role');
-        const isActive        = document.getElementById('isActive');
-        const btnCreateUser   = document.getElementById('btnCreateUser');
-        const btnReloadUsers  = document.getElementById('btnReloadUsers');
-        const userFormStatus  = document.getElementById('userFormStatus');
-        const usersListStatus = document.getElementById('usersListStatus');
-        const usersRows       = document.getElementById('usersRows');
+        const createUserForm         = document.getElementById('createUserForm');
+        const username               = document.getElementById('username');
+        const password               = document.getElementById('password');
+        const repeatPassword         = document.getElementById('repeatPassword');
+        const displayName            = document.getElementById('displayName');
+        const role                   = document.getElementById('role');
+        const isActive               = document.getElementById('isActive');
+        const btnCreateUser          = document.getElementById('btnCreateUser');
+
+        const btnReloadUsers         = document.getElementById('btnReloadUsers');
+        const btnToggleInactiveUsers = document.getElementById('btnToggleInactiveUsers');
+
+        const userFormStatus         = document.getElementById('userFormStatus');
+        const usersListStatus        = document.getElementById('usersListStatus');
+
+        const usersRows              = document.getElementById('usersRows');
+        const inactiveUsersRows      = document.getElementById('inactiveUsersRows');
+        const inactiveSection        = document.getElementById('inactiveSection');
+
+        const editUserId             = document.getElementById('editUserId');
+        const editUserEmail          = document.getElementById('editUserEmail');
+        const editUserDisplayName    = document.getElementById('editUserDisplayName');
+        const editUserRole           = document.getElementById('editUserRole');
+        const editUserIsActive       = document.getElementById('editUserIsActive');
+        const editUserJiraAccountId  = document.getElementById('editUserJiraAccountId');
+        const editUserCreatedAt      = document.getElementById('editUserCreatedAt');
+        const editUserUpdatedAt      = document.getElementById('editUserUpdatedAt');
+        const employeePhotoPlaceholder = document.getElementById('employeePhotoPlaceholder');
+        const userEditStatus         = document.getElementById('userEditStatus');
+        const btnSaveUserEdit        = document.getElementById('btnSaveUserEdit');
 
         /**
-         * Utilidad simple para mensajes de estado.
+         * ======================================================
+         * ESTADO
+         * ======================================================
+         */
+        let usersCache = [];
+        let userEditModal;
+
+        /**
+         * ======================================================
+         * UTILIDADES
+         * ======================================================
+         */
+
+        /**
+         * Muestra un mensaje de estado simple.
          */
         function setStatus(el, message, type = 'muted') {
             el.className = `status-box small text-${type} mb-3`;
@@ -177,7 +414,7 @@ auth_require_role('admin');
         }
 
         /**
-         * Escapa HTML al pintar texto dinámico.
+         * Escapa HTML para pintar texto dinámico con seguridad.
          */
         function escapeHtml(value) {
             return String(value ?? '')
@@ -189,7 +426,61 @@ auth_require_role('admin');
         }
 
         /**
-         * Carga el listado de usuarios locales.
+         * Devuelve iniciales simples para el placeholder de foto.
+         */
+        function getInitials(name) {
+            const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+            if (!parts.length) return '--';
+
+            const first = parts[0]?.charAt(0) || '';
+            const second = parts[1]?.charAt(0) || '';
+
+            return (first + second).toUpperCase() || '--';
+        }
+
+        /**
+         * Devuelve un badge visual según el rol del usuario.
+         */
+        function renderRoleBadge(roleValue) {
+            const roleText = String(roleValue || '').toLowerCase();
+
+            if (roleText === 'admin') {
+                return '<span class="badge text-bg-primary role-badge">admin</span>';
+            }
+
+            return '<span class="badge text-bg-secondary role-badge">operador</span>';
+        }
+
+        /**
+         * Construye una fila de usuario para la tabla.
+         */
+        function buildUserRowHtml(user) {
+            return `
+                <tr id="user-row-${escapeHtml(user.id)}">
+                    <td>${escapeHtml(user.username)}</td>
+                    <td>${escapeHtml(user.display_name)}</td>
+                    <td>${renderRoleBadge(user.role)}</td>
+                    <td class="text-center">
+                        <button
+                            type="button"
+                            class="user-menu-btn btn-open-user-modal"
+                            data-user-id="${escapeHtml(user.id)}"
+                            title="Ver detalle"
+                            aria-label="Ver detalle"
+                        >…</button>
+                    </td>
+                </tr>
+            `;
+        }
+
+        /**
+         * ======================================================
+         * CARGA DE USUARIOS
+         * ======================================================
+         */
+
+        /**
+         * Carga todos los usuarios locales y separa activos/inactivos.
          */
         async function loadUsers() {
             setStatus(usersListStatus, 'Cargando usuarios...', 'muted');
@@ -201,55 +492,91 @@ auth_require_role('admin');
                 if (!json.ok) {
                     usersRows.innerHTML = `
                         <tr>
-                            <td colspan="6" class="text-center text-danger">No se pudieron cargar los usuarios</td>
+                            <td colspan="4" class="text-center text-danger">No se pudieron cargar los usuarios</td>
+                        </tr>
+                    `;
+                    inactiveUsersRows.innerHTML = `
+                        <tr>
+                            <td colspan="4" class="text-center text-danger">No se pudieron cargar los usuarios</td>
                         </tr>
                     `;
                     setStatus(usersListStatus, json.error || 'Error cargando usuarios.', 'danger');
                     return;
                 }
 
-                const rows = json.data || [];
+                usersCache = Array.isArray(json.data) ? json.data : [];
 
-                if (!rows.length) {
-                    usersRows.innerHTML = `
-                        <tr>
-                            <td colspan="6" class="text-center text-muted">No hay usuarios registrados</td>
-                        </tr>
-                    `;
-                    setStatus(usersListStatus, 'No hay usuarios registrados.', 'muted');
-                    return;
-                }
+                const activeUsers = usersCache.filter(u => Number(u.is_active) === 1);
+                const inactiveUsers = usersCache.filter(u => Number(u.is_active) !== 1);
 
-                usersRows.innerHTML = rows.map(u => `
-                    <tr>
-                        <td>${escapeHtml(u.id)}</td>
-                        <td>${escapeHtml(u.username)}</td>
-                        <td>${escapeHtml(u.display_name)}</td>
-                        <td>${escapeHtml(u.role)}</td>
-                        <td>${escapeHtml(u.jira_account_id)}</td>
-                        <td>${Number(u.is_active) === 1 ? 'Sí' : 'No'}</td>
-                    </tr>
-                `).join('');
+                renderActiveUsers(activeUsers);
+                renderInactiveUsers(inactiveUsers);
 
-                setStatus(usersListStatus, `Usuarios cargados: ${rows.length}`, 'success');
+                setStatus(usersListStatus, `Usuarios cargados: ${usersCache.length}`, 'success');
 
             } catch (err) {
                 console.error(err);
+
                 usersRows.innerHTML = `
                     <tr>
-                        <td colspan="6" class="text-center text-danger">Error de red</td>
+                        <td colspan="4" class="text-center text-danger">Error de red</td>
                     </tr>
                 `;
+
+                inactiveUsersRows.innerHTML = `
+                    <tr>
+                        <td colspan="4" class="text-center text-danger">Error de red</td>
+                    </tr>
+                `;
+
                 setStatus(usersListStatus, 'Error cargando usuarios.', 'danger');
             }
         }
 
         /**
+         * Pinta la tabla principal con usuarios activos.
+         */
+        function renderActiveUsers(rows) {
+            if (!rows.length) {
+                usersRows.innerHTML = `
+                    <tr>
+                        <td colspan="4" class="text-center text-muted">No hay usuarios activos</td>
+                    </tr>
+                `;
+                return;
+            }
+
+            usersRows.innerHTML = rows.map(buildUserRowHtml).join('');
+        }
+
+        /**
+         * Pinta la tabla secundaria con usuarios inactivos.
+         */
+        function renderInactiveUsers(rows) {
+            if (!rows.length) {
+                inactiveUsersRows.innerHTML = `
+                    <tr>
+                        <td colspan="4" class="text-center text-muted">No hay usuarios inactivos</td>
+                    </tr>
+                `;
+                btnToggleInactiveUsers.classList.add('d-none');
+                inactiveSection.classList.remove('visible');
+                btnToggleInactiveUsers.textContent = 'Mostrar usuarios inactivos';
+                return;
+            }
+
+            inactiveUsersRows.innerHTML = rows.map(buildUserRowHtml).join('');
+            btnToggleInactiveUsers.classList.remove('d-none');
+        }
+
+        /**
+         * ======================================================
+         * ALTA DE USUARIO
+         * ======================================================
+         */
+
+        /**
          * Envía al backend la creación del usuario.
-         * El backend:
-         * - crea/invita en Jira
-         * - obtiene accountId real
-         * - guarda en users
          */
         async function createUser() {
             const payload = {
@@ -264,6 +591,13 @@ auth_require_role('admin');
                 setStatus(userFormStatus, 'Todos los campos son obligatorios.', 'danger');
                 return;
             }
+            
+            // Validación: ambas contraseñas deben coincidir
+            if (payload.password !== repeatPassword.value) {
+                setStatus(userFormStatus, 'Las contraseñas no coinciden.', 'danger');
+                return;
+            }
+
 
             btnCreateUser.disabled = true;
             setStatus(userFormStatus, 'Creando usuario...', 'muted');
@@ -284,12 +618,11 @@ auth_require_role('admin');
 
                 setStatus(userFormStatus, 'Usuario creado correctamente.', 'success');
 
-                // Limpiar formulario
                 createUserForm.reset();
                 isActive.checked = true;
                 role.value = 'operador';
+                repeatPassword.value = '';
 
-                // Recargar listado
                 await loadUsers();
 
             } catch (err) {
@@ -301,8 +634,113 @@ auth_require_role('admin');
         }
 
         /**
-         * Eventos
+         * ======================================================
+         * MODAL DETALLE / EDICIÓN
+         * ======================================================
          */
+
+        /**
+         * Busca un usuario en caché por ID.
+         */
+        function getUserFromCache(userId) {
+            return usersCache.find(u => Number(u.id) === Number(userId)) || null;
+        }
+
+        /**
+         * Abre el modal del usuario y carga sus datos.
+         */
+        function openUserEditModal(userId) {
+            const user = getUserFromCache(userId);
+
+            if (!user) {
+                setStatus(userEditStatus, 'No se encontró el usuario seleccionado.', 'danger');
+                return;
+            }
+
+            editUserId.value            = user.id;
+            editUserEmail.value         = user.username || '';
+            editUserDisplayName.value   = user.display_name || '';
+            editUserRole.value          = user.role || 'operador';
+            editUserIsActive.checked    = Number(user.is_active) === 1;
+            editUserJiraAccountId.value = user.jira_account_id || '';
+            editUserCreatedAt.value     = user.created_at || '';
+            editUserUpdatedAt.value     = user.updated_at || '';
+
+            employeePhotoPlaceholder.textContent = getInitials(user.display_name || user.username || '--');
+
+            setStatus(userEditStatus, '', 'muted');
+
+            userEditModal.show();
+        }
+
+        /**
+         * Guarda los cambios del usuario desde el modal.
+         */
+        async function saveUserEdit() {
+            const payload = {
+                user_id: Number(editUserId.value),
+                display_name: editUserDisplayName.value.trim(),
+                role: editUserRole.value,
+                is_active: editUserIsActive.checked ? 1 : 0
+            };
+
+            if (!payload.user_id || !payload.display_name || !payload.role) {
+                setStatus(userEditStatus, 'Nombre, rol y estado son obligatorios.', 'danger');
+                return;
+            }
+
+            btnSaveUserEdit.disabled = true;
+            setStatus(userEditStatus, 'Guardando cambios...', 'muted');
+
+            try {
+                const res = await fetch(API_UPDATE_USER, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const json = await res.json();
+
+                if (!json.ok) {
+                    setStatus(userEditStatus, json.error || 'No se pudo actualizar el usuario.', 'danger');
+                    return;
+                }
+
+                setStatus(userEditStatus, 'Usuario actualizado correctamente.', 'success');
+
+                await loadUsers();
+
+                // Recargar datos actualizados en el modal
+                const updated = getUserFromCache(payload.user_id);
+                if (updated) {
+                    editUserEmail.value         = updated.username || '';
+                    editUserDisplayName.value   = updated.display_name || '';
+                    editUserRole.value          = updated.role || 'operador';
+                    editUserIsActive.checked    = Number(updated.is_active) === 1;
+                    editUserJiraAccountId.value = updated.jira_account_id || '';
+                    editUserCreatedAt.value     = updated.created_at || '';
+                    editUserUpdatedAt.value     = updated.updated_at || '';
+                    employeePhotoPlaceholder.textContent = getInitials(updated.display_name || updated.username || '--');
+                }
+
+                setTimeout(() => {
+                    userEditModal.hide();
+                }, 450);
+
+            } catch (err) {
+                console.error(err);
+                setStatus(userEditStatus, 'Error de red actualizando el usuario.', 'danger');
+            } finally {
+                btnSaveUserEdit.disabled = false;
+            }
+        }
+
+        /**
+         * ======================================================
+         * EVENTOS
+         * ======================================================
+         */
+
         createUserForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             await createUser();
@@ -310,10 +748,38 @@ auth_require_role('admin');
 
         btnReloadUsers.addEventListener('click', loadUsers);
 
+        btnToggleInactiveUsers.addEventListener('click', () => {
+            const visible = inactiveSection.classList.toggle('visible');
+            btnToggleInactiveUsers.textContent = visible
+                ? 'Ocultar usuarios inactivos'
+                : 'Mostrar usuarios inactivos';
+        });
+
+        document.addEventListener('click', (e) => {
+            const btn = e.target.closest('.btn-open-user-modal');
+            if (!btn) return;
+
+            const userId = btn.dataset.userId || '';
+            if (userId) {
+                openUserEditModal(Number(userId));
+            }
+        });
+
+        btnSaveUserEdit.addEventListener('click', saveUserEdit);
+
         /**
+         * ======================================================
          * INIT
+         * ======================================================
          */
-        loadUsers();
+        (async () => {
+            try {
+                userEditModal = new bootstrap.Modal(document.getElementById('userEditModal'));
+                await loadUsers();
+            } catch (err) {
+                console.error('Error inicializando gestión de usuarios:', err);
+            }
+        })();
     </script>
 </body>
 </html>
