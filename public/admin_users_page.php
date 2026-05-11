@@ -294,23 +294,40 @@ auth_require_role('admin');
                                     <input type="text" id="editUserDisplayName" class="form-control">
                                 </div>
 
-                                <div class="col-12 col-md-6">
-                                    <label for="editUserRole" class="form-label">Rol</label>
-                                    <select id="editUserRole" class="form-select">
-                                        <option value="operador">operador</option>
-                                        <option value="admin">admin</option>
-                                    </select>
-                                </div>
+                               <div class="mb-3">
+                                        <label for="role" class="form-label">Rol</label>
+                                        <select id="role" class="form-select" required>
+                                            <option value="operador">operador</option>
+                                            <option value="admin">admin</option>
+                                        </select>
+                                    </div>
 
-                                <div class="col-12 col-md-6">
-                                    <label class="form-label d-block">Estado</label>
-                                    <div class="form-check form-switch mt-2">
-                                        <input class="form-check-input" type="checkbox" id="editUserIsActive">
-                                        <label class="form-check-label" for="editUserIsActive">
+                                    <div class="mb-3">
+                                        <label for="phoneNumber" class="form-label">Teléfono</label>
+                                        <input
+                                            type="text"
+                                            id="phoneNumber"
+                                            class="form-control"
+                                            placeholder="+34600111222"
+                                        >
+                                        <div class="form-text">
+                                            Formato internacional. Ejemplo: +34600111222
+                                        </div>
+                                    </div>
+
+                                    <div class="form-check form-switch mb-3">
+                                        <input class="form-check-input" type="checkbox" id="phoneNotificationsEnabled">
+                                        <label class="form-check-label" for="phoneNotificationsEnabled">
+                                            Recibe llamadas automáticas
+                                        </label>
+                                    </div>
+
+                                    <div class="form-check mb-3">
+                                        <input class="form-check-input" type="checkbox" id="isActive" checked>
+                                        <label class="form-check-label" for="isActive">
                                             Usuario activo
                                         </label>
                                     </div>
-                                </div>
 
                                 <div class="col-12">
                                     <label for="editUserJiraAccountId" class="form-label">Jira account ID</label>
@@ -366,6 +383,9 @@ auth_require_role('admin');
         const repeatPassword         = document.getElementById('repeatPassword');
         const displayName            = document.getElementById('displayName');
         const role                   = document.getElementById('role');
+        const phoneNumber            = document.getElementById('phoneNumber');
+        const phoneNotificationsEnabled = document.getElementById('phoneNotificationsEnabled');
+
         const isActive               = document.getElementById('isActive');
         const btnCreateUser          = document.getElementById('btnCreateUser');
 
@@ -584,12 +604,28 @@ auth_require_role('admin');
                 password: password.value,
                 display_name: displayName.value.trim(),
                 role: role.value,
+                phone_number: phoneNumber.value.trim(),
+                phone_notifications_enabled: phoneNotificationsEnabled.checked ? 1 : 0,
                 is_active: isActive.checked ? 1 : 0
             };
 
             if (!payload.username || !payload.password || !payload.display_name || !payload.role) {
-                setStatus(userFormStatus, 'Todos los campos son obligatorios.', 'danger');
+                setStatus(userFormStatus, 'Todos los campos obligatorios deben estar rellenos.', 'danger');
                 return;
+            }
+
+            // Si las llamadas están habilitadas, exigimos teléfono válido
+            if (payload.phone_notifications_enabled === 1) {
+                const phoneRegex = /^\+[1-9]\d{6,14}$/;
+
+                if (!phoneRegex.test(payload.phone_number)) {
+                    setStatus(
+                        userFormStatus,
+                        'Si las llamadas están habilitadas, el teléfono debe estar en formato internacional válido (por ejemplo, +34600111222).',
+                        'danger'
+                    );
+                    return;
+                }
             }
             
             // Validación: ambas contraseñas deben coincidir
@@ -621,7 +657,10 @@ auth_require_role('admin');
                 createUserForm.reset();
                 isActive.checked = true;
                 role.value = 'operador';
-                repeatPassword.value = '';
+                repeatPassword.value = '';           
+                phoneNotificationsEnabled.checked = false;
+                phoneNumber.value = '';
+
 
                 await loadUsers();
 
