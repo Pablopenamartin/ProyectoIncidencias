@@ -8,16 +8,20 @@
  *
  * RELACIÓN CON OTROS ARCHIVOS:
  * - Usa app/config/database.php para reutilizar PDO.
- * - Leerá de la tabla users:
+ * - Lee de la tabla users:
  *   - phone_number
  *   - phone_notifications_enabled
  *   - is_active
+ * - Registra resultados en:
+ *   - alert_phone_notifications
  *
  * FUNCIONES PRINCIPALES:
- * - callUsersForAlert(): llama a todos los usuarios activos con llamadas habilitadas
+ * - callUsersForAlert(): llama a los usuarios activos con llamadas habilitadas
  * - getCallableUsers(): obtiene teléfonos válidos
  * - buildCallMessage(): construye el texto a voz
  * - callPhoneNumber(): ejecuta la llamada saliente en Twilio usando TwiML inline
+ * - hasCallAlreadyBeenSent(): evita duplicar llamadas por alerta/usuario/teléfono
+ * - saveCallNotificationStatus(): registra el resultado de la llamada
  *
  * VARIABLES DE ENTORNO NECESARIAS:
  * - TWILIO_ACCOUNT_SID
@@ -48,15 +52,17 @@ class PhoneCallNotificationService
      * __construct
      * --------------------------------------------------------------
      * Inicializa la conexión y lee configuración Twilio desde entorno.
+     *
+     * @param PDO|null $pdo Conexión opcional inyectada
      */
     public function __construct(?PDO $pdo = null)
     {
         $this->pdo = $pdo instanceof PDO ? $pdo : getPDO();
 
-        $this->twilioAccountSid = trim((string)env('TWILIO_ACCOUNT_SID', ''));
-        $this->twilioAuthToken  = trim((string)env('TWILIO_AUTH_TOKEN', ''));
+        $this->twilioAccountSid  = trim((string)env('TWILIO_ACCOUNT_SID', ''));
+        $this->twilioAuthToken   = trim((string)env('TWILIO_AUTH_TOKEN', ''));
         $this->twilioPhoneNumber = trim((string)env('TWILIO_PHONE_NUMBER', ''));
-        $this->ttsLanguage = trim((string)env('TWILIO_TTS_LANGUAGE', 'es-ES'));
+        $this->ttsLanguage       = trim((string)env('TWILIO_TTS_LANGUAGE', 'es-ES'));
 
         if ($this->twilioAccountSid === '' || $this->twilioAuthToken === '' || $this->twilioPhoneNumber === '') {
             throw new RuntimeException('Faltan variables de entorno de Twilio (SID, token o número origen).');
@@ -66,44 +72,94 @@ class PhoneCallNotificationService
     /**
      * callUsersForAlert
      * --------------------------------------------------------------
-     * Llama a todos los usuarios activos con llamadas habilitadas.
+     * Llama a todos los usuarios activos con llamadas habilitadas
+     * para una alerta concreta.
+     *
+     * REGLA:
+     * - una sola llamada por:
+     *   - jira_key
+     *   - report_id
+     *   - user_id
+     *   - phone_number
      *
      * QUÉ HACE:
-     * - lee usuarios de la tabla users
-     * - construye un mensaje de voz corto
-     * - ejecuta una llamada por cada teléfono
+     * - obtiene usuarios llamables
+     * - construye el mensaje TTS
+     * - evita duplicados consultando alert_phone_notifications
+     * - registra éxito o error por cada llamada
      *
-     * @param array $alert Datos de la alerta crítica
+     * @param array $alert Datos de la alerta
      * @return array Resumen del proceso
      */
     public function callUsersForAlert(array $alert): array
     {
+        $reportId = (int)($alert['report_id'] ?? 0);
+        $jiraKey  = trim((string)($alert['jira_key'] ?? ''));
+
+        if ($reportId <= 0 || $jiraKey === '') {
+            throw new InvalidArgumentException('La alerta debe incluir report_id y jira_key.');
+        }
+
         $users = $this->getCallableUsers();
 
         if (empty($users)) {
             return [
                 'callable_users' => 0,
                 'calls_made'     => 0,
+                'calls_failed'   => 0,
             ];
         }
 
         $message = $this->buildCallMessage($alert);
-        $callsMade = 0;
+
+        $callsMade   = 0;
+        $callsFailed = 0;
 
         foreach ($users as $user) {
-            $phone = trim((string)($user['phone_number'] ?? ''));
+            $userId      = (int)($user['id'] ?? 0);
+            $phoneNumber = trim((string)($user['phone_number'] ?? ''));
 
-            if ($phone === '') {
+            if ($userId <= 0 || $phoneNumber === '') {
                 continue;
             }
 
-            $this->callPhoneNumber($phone, $message);
-            $callsMade++;
+            // Evitar llamada duplicada a este usuario/teléfono para esta alerta
+            if ($this->hasCallAlreadyBeenSent($jiraKey, $reportId, $userId, $phoneNumber)) {
+                continue;
+            }
+
+            try {
+                $this->callPhoneNumber($phoneNumber, $message);
+
+                $this->saveCallNotificationStatus(
+                    $jiraKey,
+                    $reportId,
+                    $userId,
+                    $phoneNumber,
+                    true,
+                    null
+                );
+
+                $callsMade++;
+
+            } catch (Throwable $t) {
+                $this->saveCallNotificationStatus(
+                    $jiraKey,
+                    $reportId,
+                    $userId,
+                    $phoneNumber,
+                    false,
+                    $t->getMessage()
+                );
+
+                $callsFailed++;
+            }
         }
 
         return [
             'callable_users' => count($users),
             'calls_made'     => $callsMade,
+            'calls_failed'   => $callsFailed,
         ];
     }
 
@@ -134,6 +190,46 @@ class PhoneCallNotificationService
     }
 
     /**
+     * hasCallAlreadyBeenSent
+     * --------------------------------------------------------------
+     * Comprueba si una llamada ya fue enviada correctamente
+     * para la misma alerta y el mismo usuario/teléfono.
+     *
+     * @param string $jiraKey Clave Jira
+     * @param int    $reportId ID del informe
+     * @param int    $userId ID del usuario
+     * @param string $phoneNumber Teléfono destino
+     * @return bool
+     */
+    private function hasCallAlreadyBeenSent(
+        string $jiraKey,
+        int $reportId,
+        int $userId,
+        string $phoneNumber
+    ): bool {
+        $sql = "
+            SELECT id
+            FROM alert_phone_notifications
+            WHERE jira_key = :jira_key
+              AND report_id = :report_id
+              AND user_id = :user_id
+              AND phone_number = :phone_number
+              AND call_sent = 1
+            LIMIT 1
+        ";
+
+        $st = $this->pdo->prepare($sql);
+        $st->execute([
+            ':jira_key'     => $jiraKey,
+            ':report_id'    => $reportId,
+            ':user_id'      => $userId,
+            ':phone_number' => $phoneNumber,
+        ]);
+
+        return (bool)$st->fetchColumn();
+    }
+
+    /**
      * buildCallMessage
      * --------------------------------------------------------------
      * Construye el texto a voz que Twilio leerá en la llamada.
@@ -151,7 +247,6 @@ class PhoneCallNotificationService
         $summary = trim((string)($alert['summary'] ?? ''));
         $reason  = trim((string)($alert['critical_reason'] ?? ''));
 
-        // Cortamos para no generar una locución excesiva
         $summaryShort = mb_substr($summary, 0, 180);
         $reasonShort  = mb_substr($reason, 0, 180);
 
@@ -223,11 +318,106 @@ class PhoneCallNotificationService
     private function buildTwimlSay(string $message): string
     {
         $safeMessage = htmlspecialchars($message, ENT_XML1 | ENT_QUOTES, 'UTF-8');
-        $language = htmlspecialchars($this->ttsLanguage, ENT_XML1 | ENT_QUOTES, 'UTF-8');
+        $language    = htmlspecialchars($this->ttsLanguage, ENT_XML1 | ENT_QUOTES, 'UTF-8');
 
         return '<?xml version="1.0" encoding="UTF-8"?>'
             . '<Response>'
             . '<Say language="' . $language . '">' . $safeMessage . '</Say>'
             . '</Response>';
+    }
+
+    /**
+     * saveCallNotificationStatus
+     * --------------------------------------------------------------
+     * Inserta o actualiza el registro de llamada en alert_phone_notifications.
+     *
+     * @param string      $jiraKey Clave Jira
+     * @param int         $reportId ID del informe
+     * @param int         $userId ID del usuario
+     * @param string      $phoneNumber Teléfono destino
+     * @param bool        $callSent Si la llamada se realizó correctamente
+     * @param string|null $callError Error devuelto si falló
+     * @return void
+     */
+    private function saveCallNotificationStatus(
+        string $jiraKey,
+        int $reportId,
+        int $userId,
+        string $phoneNumber,
+        bool $callSent,
+        ?string $callError
+    ): void {
+        $sqlCheck = "
+            SELECT id
+            FROM alert_phone_notifications
+            WHERE jira_key = :jira_key
+              AND report_id = :report_id
+              AND user_id = :user_id
+              AND phone_number = :phone_number
+            LIMIT 1
+        ";
+
+        $stCheck = $this->pdo->prepare($sqlCheck);
+        $stCheck->execute([
+            ':jira_key'     => $jiraKey,
+            ':report_id'    => $reportId,
+            ':user_id'      => $userId,
+            ':phone_number' => $phoneNumber,
+        ]);
+
+        $existingId = $stCheck->fetchColumn();
+
+        if ($existingId) {
+            $sqlUpdate = "
+                UPDATE alert_phone_notifications
+                SET
+                    call_sent = :call_sent,
+                    call_error = :call_error,
+                    updated_at = NOW()
+                WHERE id = :id
+                LIMIT 1
+            ";
+
+            $stUpdate = $this->pdo->prepare($sqlUpdate);
+            $stUpdate->execute([
+                ':call_sent'  => $callSent ? 1 : 0,
+                ':call_error' => $callError,
+                ':id'         => $existingId,
+            ]);
+
+            return;
+        }
+
+        $sqlInsert = "
+            INSERT INTO alert_phone_notifications (
+                jira_key,
+                report_id,
+                user_id,
+                phone_number,
+                call_sent,
+                call_error,
+                created_at,
+                updated_at
+            ) VALUES (
+                :jira_key,
+                :report_id,
+                :user_id,
+                :phone_number,
+                :call_sent,
+                :call_error,
+                NOW(),
+                NOW()
+            )
+        ";
+
+        $stInsert = $this->pdo->prepare($sqlInsert);
+        $stInsert->execute([
+            ':jira_key'     => $jiraKey,
+            ':report_id'    => $reportId,
+            ':user_id'      => $userId,
+            ':phone_number' => $phoneNumber,
+            ':call_sent'    => $callSent ? 1 : 0,
+            ':call_error'   => $callError,
+        ]);
     }
 }

@@ -24,6 +24,9 @@
 require_once __DIR__ . '/../config/constants.php';
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/SmtpMailService.php';
+require_once __DIR__ . '/PhoneCallNotificationService.php';
+// Servicio encargado de realizar llamadas automáticas por Twilio.
+
 
 class AlertNotificationService
 {
@@ -72,33 +75,57 @@ class AlertNotificationService
         $processed  = 0;
         $emailSent  = 0;
         $teamsSent  = 0;
+        $callsMade  = 0;
+        $callsFailed = 0;
+
 
         foreach ($alerts as $alert) {
             $processed++;
 
+            // --------------------------------------------------
+            // 1) Email a todos los usuarios activos
+            // --------------------------------------------------
             $emailOk = $this->sendAlertEmailToAll($alert);
             if ($emailOk) {
                 $emailSent++;
             }
 
+            // --------------------------------------------------
+            // 2) Mensaje al canal de Teams
+            // --------------------------------------------------
             $teamsOk = $this->sendAlertToTeams($alert);
             if ($teamsOk) {
                 $teamsSent++;
             }
 
+            // --------------------------------------------------
+            // 3) Llamadas automáticas por Twilio
+            // --------------------------------------------------
+            $callService = new PhoneCallNotificationService($this->pdo);
+            $callResult = $callService->callUsersForAlert($alert);
+
+            $callsMade   += (int)($callResult['calls_made'] ?? 0);
+            $callsFailed += (int)($callResult['calls_failed'] ?? 0);
+
+            // --------------------------------------------------
+            // 4) Registrar estado general de correo + Teams
+            // --------------------------------------------------
             $this->saveNotificationStatus(
                 (string)$alert['jira_key'],
                 (int)$alert['report_id'],
                 $teamsOk,
                 $emailOk
             );
+
         }
 
         return [
-            'alerts_found'   => count($alerts),
-            'alerts_sent'    => $processed,
-            'email_sent'     => $emailSent,
-            'teams_sent'     => $teamsSent,
+            'alerts_found' => count($alerts),
+            'alerts_sent'  => $processed,
+            'email_sent'   => $emailSent,
+            'teams_sent'   => $teamsSent,
+            'calls_made'   => $callsMade,
+            'calls_failed' => $callsFailed,
         ];
     }
 
