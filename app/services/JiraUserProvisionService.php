@@ -85,13 +85,24 @@ class JiraUserProvisionService
      */
     public function registerUser(array $data): array
     {
-        $username    = trim((string)($data['username'] ?? ''));
-        $password    = (string)($data['password'] ?? '');
-        $displayName = trim((string)($data['display_name'] ?? ''));
-        $role        = trim((string)($data['role'] ?? ''));
-        $isActive    = isset($data['is_active']) ? (int)(bool)$data['is_active'] : 1;
+        $username                  = trim((string)($data['username'] ?? ''));
+        $password                  = (string)($data['password'] ?? '');
+        $displayName               = trim((string)($data['display_name'] ?? ''));
+        $role                      = trim((string)($data['role'] ?? ''));
+        $isActive                  = isset($data['is_active']) ? (int)(bool)$data['is_active'] : 1;
+        $phoneNumber               = trim((string)($data['phone_number'] ?? ''));
+        $phoneNotificationsEnabled = isset($data['phone_notifications_enabled'])
+            ? (int)(bool)$data['phone_notifications_enabled']
+            : 0;
 
-        $this->validateInput($username, $password, $displayName, $role);
+        $this->validateInput(
+            $username,
+            $password,
+            $displayName,
+            $role,
+            $phoneNumber,
+            $phoneNotificationsEnabled
+        );
 
         if ($this->users->findByUsername($username)) {
             throw new RuntimeException('Ya existe un usuario local con ese username.');
@@ -121,12 +132,14 @@ class JiraUserProvisionService
         $passwordHash = password_hash($password, PASSWORD_DEFAULT);
 
         $userId = $this->users->createUser([
-            'username'        => $username,
-            'password_hash'   => $passwordHash,
-            'display_name'    => $displayName,
-            'role'            => $role,
-            'jira_account_id' => $jiraAccountId,
-            'is_active'       => $isActive,
+            'username'                    => $username,
+            'password_hash'               => $passwordHash,
+            'display_name'                => $displayName,
+            'role'                        => $role,
+            'jira_account_id'             => $jiraAccountId,
+            'phone_number'                => $phoneNumber !== '' ? $phoneNumber : null,
+            'phone_notifications_enabled' => $phoneNotificationsEnabled,
+            'is_active'                   => $isActive,
         ]);
 
         // ----------------------------------------------------------
@@ -140,11 +153,13 @@ class JiraUserProvisionService
         $this->sendTeamsInvitationMail($username, $displayName);
 
         return [
-            'user_id'         => $userId,
-            'username'        => $username,
-            'display_name'    => $displayName,
-            'role'            => $role,
-            'jira_account_id' => $jiraAccountId,
+            'user_id'                     => $userId,
+            'username'                    => $username,
+            'display_name'                => $displayName,
+            'role'                        => $role,
+            'jira_account_id'             => $jiraAccountId,
+            'phone_number'                => $phoneNumber !== '' ? $phoneNumber : null,
+            'phone_notifications_enabled' => $phoneNotificationsEnabled,
         ];
     }
 
@@ -157,13 +172,17 @@ class JiraUserProvisionService
      * @param string $password Contraseña en texto plano
      * @param string $displayName Nombre visible
      * @param string $role Rol del usuario
+     * @param string $phoneNumber Teléfono del usuario
+     * @param int    $phoneNotificationsEnabled Si recibe llamadas
      * @return void
      */
     private function validateInput(
         string $username,
         string $password,
         string $displayName,
-        string $role
+        string $role,
+        string $phoneNumber,
+        int $phoneNotificationsEnabled
     ): void {
         if ($username === '' || !filter_var($username, FILTER_VALIDATE_EMAIL)) {
             throw new InvalidArgumentException('El username debe ser un email válido.');
@@ -179,6 +198,23 @@ class JiraUserProvisionService
 
         if (!in_array($role, ['admin', 'operador'], true)) {
             throw new InvalidArgumentException('El rol debe ser admin u operador.');
+        }
+
+        if (!in_array($phoneNotificationsEnabled, [0, 1], true)) {
+            throw new InvalidArgumentException('phone_notifications_enabled debe valer 0 o 1.');
+        }
+
+        // Si recibe llamadas, exigimos teléfono en formato internacional válido
+        if ($phoneNotificationsEnabled === 1) {
+            if ($phoneNumber === '') {
+                throw new InvalidArgumentException('Si las llamadas están habilitadas, el teléfono es obligatorio.');
+            }
+
+            if (preg_match('/^\+[1-9]\d{6,14}$/', $phoneNumber) !== 1) {
+                throw new InvalidArgumentException(
+                    'El teléfono debe estar en formato internacional válido (por ejemplo, +34600111222).'
+                );
+            }
         }
     }
 
@@ -258,7 +294,6 @@ class JiraUserProvisionService
             return '';
         }
 
-        // Intento 1: coincidencia exacta por emailAddress
         foreach ($response as $user) {
             $accountId    = trim((string)($user['accountId'] ?? ''));
             $emailAddress = strtolower(trim((string)($user['emailAddress'] ?? '')));
@@ -268,7 +303,6 @@ class JiraUserProvisionService
             }
         }
 
-        // Intento 2: fallback al primer usuario con accountId
         foreach ($response as $user) {
             $accountId = trim((string)($user['accountId'] ?? ''));
             if ($accountId !== '') {
