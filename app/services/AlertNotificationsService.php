@@ -503,7 +503,10 @@ private function sendAlertToTeams(array $alert): bool
 
         $processed = 0;
         $emailSent = 0;
-        $teamsSent = 0;
+        $teamsSent = 0; 
+        $callsMade = 0;   // NUEVO: contador de llamadas realizadas
+        $callsFailed = 0; // NUEVO: contador de llamadas fallidas
+
 
         foreach ($alerts as $alert) {
             $processed++;
@@ -532,6 +535,19 @@ private function sendAlertToTeams(array $alert): bool
                 }
             }
 
+            // NUEVO: llamadas automáticas por Twilio en reintento
+            try {
+                $callService = new PhoneCallNotificationService($this->pdo);
+                $callResult = $callService->callUsersForAlert($alert);
+
+                $callsMade   += (int)($callResult['calls_made'] ?? 0);
+                $callsFailed += (int)($callResult['calls_failed'] ?? 0);
+
+            } catch (Throwable $callError) {
+                // Si Twilio falla, no rompemos el reintento general
+                $callsFailed++;
+            }
+
             $this->upsertNotificationStatus(
                 (string)$alert['jira_key'],
                 (int)$alert['report_id'],
@@ -545,6 +561,8 @@ private function sendAlertToTeams(array $alert): bool
             'alerts_sent'  => $processed,
             'email_sent'   => $emailSent,
             'teams_sent'   => $teamsSent,
+            'calls_made'   => $callsMade,    // NUEVO
+            'calls_failed' => $callsFailed,  // NUEVO
         ];
     }
 
