@@ -39,9 +39,12 @@ try {
             display_name,
             role,
             jira_account_id,
+            phone_number,
+            phone_notifications_enabled,
             is_active,
             created_at,
             updated_at
+
         FROM users
         ORDER BY id DESC
     ";
