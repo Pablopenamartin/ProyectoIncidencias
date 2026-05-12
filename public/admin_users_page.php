@@ -302,11 +302,11 @@ auth_require_role('admin');
                                         </select>
                                     </div>
 
-                                    <div class="mb-3">
-                                        <label for="phoneNumber" class="form-label">Teléfono</label>
+                                    <div class="col-12 col-md-6">
+                                        <label for="editUserPhoneNumber" class="form-label">Teléfono</label>
                                         <input
                                             type="text"
-                                            id="phoneNumber"
+                                            id="editUserPhoneNumber"
                                             class="form-control"
                                             placeholder="+34600111222"
                                         >
@@ -315,11 +315,14 @@ auth_require_role('admin');
                                         </div>
                                     </div>
 
-                                    <div class="form-check form-switch mb-3">
-                                        <input class="form-check-input" type="checkbox" id="phoneNotificationsEnabled">
-                                        <label class="form-check-label" for="phoneNotificationsEnabled">
-                                            Recibe llamadas automáticas
-                                        </label>
+                                    <div class="col-12 col-md-6">
+                                        <label class="form-label d-block">Llamadas</label>
+                                        <div class="form-check form-switch mt-2">
+                                            <input class="form-check-input" type="checkbox" id="editUserPhoneNotificationsEnabled">
+                                            <label class="form-check-label" for="editUserPhoneNotificationsEnabled">
+                                                Recibe llamadas automáticas
+                                            </label>
+                                        </div>
                                     </div>
 
                                     <div class="form-check mb-3">
@@ -409,7 +412,10 @@ auth_require_role('admin');
         const editUserUpdatedAt      = document.getElementById('editUserUpdatedAt');
         const employeePhotoPlaceholder = document.getElementById('employeePhotoPlaceholder');
         const userEditStatus         = document.getElementById('userEditStatus');
-        const btnSaveUserEdit        = document.getElementById('btnSaveUserEdit');
+        const btnSaveUserEdit        = document.getElementById('btnSaveUserEdit');        
+        const editUserPhoneNumber = document.getElementById('editUserPhoneNumber');
+        const editUserPhoneNotificationsEnabled = document.getElementById('editUserPhoneNotificationsEnabled');
+
 
         /**
          * ======================================================
@@ -702,6 +708,14 @@ auth_require_role('admin');
             editUserRole.value          = user.role || 'operador';
             editUserIsActive.checked    = Number(user.is_active) === 1;
             editUserJiraAccountId.value = user.jira_account_id || '';
+            // Teléfono y llamadas: solo cargar si los elementos existen realmente en el modal
+            if (editUserPhoneNumber) {
+                editUserPhoneNumber.value = user.phone_number || '';
+            }
+
+            if (editUserPhoneNotificationsEnabled) {
+                editUserPhoneNotificationsEnabled.checked = Number(user.phone_notifications_enabled) === 1;
+            }
             editUserCreatedAt.value     = user.created_at || '';
             editUserUpdatedAt.value     = user.updated_at || '';
 
