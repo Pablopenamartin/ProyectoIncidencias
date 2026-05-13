@@ -66,6 +66,39 @@ auth_require_role('admin');
     #reportsStatus {
       min-height: 22px;
     }
+    /* ======================================================
+       NUEVOS ESTILOS PARA SECCIONES DESPLEGABLES
+       ====================================================== */
+    .report-section-pre {
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-size: .95rem;
+      background: #fff;
+      border: 1px solid #dee2e6;
+      border-radius: .375rem;
+      padding: 1rem;
+    }
+
+    .report-sections-accordion .accordion-button,
+    .issue-details-accordion .accordion-button {
+      font-weight: 600;
+    }
+
+    .issue-summary-line {
+      font-weight: 600;
+    }
+
+    .issue-meta-line {
+      font-size: .9rem;
+      color: #6c757d;
+    }
+
+    .issue-badge-wrap {
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+      flex-wrap: wrap;
+    }
   </style>
 </head>
 <body>
