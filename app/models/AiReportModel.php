@@ -120,6 +120,40 @@ class AiReportModel
             ':id'    => $reportId,
         ]);
     }
+    /**
+     * markCompletedManually
+     * --------------------------------------------------------------
+     * Marca manualmente un informe como COMPLETED.
+     *
+     * QUÉ HACE:
+     * - Cambia status a 'completed'
+     * - Actualiza completed_at a la fecha/hora actual
+     * - NO borra error_message
+     *
+     * POR QUÉ:
+     * - Así conservamos trazabilidad del error original
+     * - Pero permitimos cerrar manualmente el informe si el análisis
+     *   fue válido y solo falló una parte secundaria (por ejemplo Teams)
+     *
+     * @param int $reportId ID del informe
+     * @return void
+     */
+    public function markCompletedManually(int $reportId): void
+    {
+        $sql = "
+            UPDATE ai_reports
+            SET
+                status = 'completed',
+                completed_at = NOW()
+            WHERE id = :id
+        ";
+
+        $st = $this->pdo->prepare($sql);
+        $st->execute([
+            ':id' => $reportId,
+        ]);
+    }
+
 
     /**
      * Guarda el análisis IA por incidencia.
@@ -208,6 +242,7 @@ class AiReportModel
                 total_critical_detected,
                 trigger_source,
                 sync_reference_time,
+                error_message,
                 started_at,
                 completed_at,
                 created_at
