@@ -17,13 +17,12 @@
  * - Al hacer click en un informe, desplegar su detalle.
  * - Mostrar secciones internas del informe en formato desplegable.
  * - Mostrar incidencias analizadas en formato desplegable.
- * - Si el informe está failed, mostrar el error y permitir marcarlo manualmente como completed.
  */
 
+require_once __DIR__ . '/../app/config/constants.php';
 require_once __DIR__ . '/../app/helpers/Auth.php';
 
 auth_require_role('admin');
-// Solo admin puede acceder a la pantalla de informes IA.
 ?>
 <!doctype html>
 <html lang="es">
@@ -32,7 +31,6 @@ auth_require_role('admin');
   <title>Informes IA</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
 
-  <!-- Bootstrap CSS -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
 
   <style>
@@ -75,7 +73,7 @@ auth_require_role('admin');
     }
 
     /* ======================================================
-       ESTILOS PARA SECCIONES DESPLEGABLES
+       NUEVOS ESTILOS PARA SECCIONES DESPLEGABLES
        ====================================================== */
     .report-section-pre {
       white-space: pre-wrap;
@@ -142,7 +140,6 @@ auth_require_role('admin');
     </div>
   </div>
 
-  <!-- Bootstrap JS -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 
   <script>
@@ -241,13 +238,13 @@ auth_require_role('admin');
     }
 
     /**
-     * Construye una sección desplegable reutilizable.
-     *
-     * @param {string} sectionId ID interno
-     * @param {string} title Título visible
-     * @param {string} contentHtml Contenido HTML ya generado
-     * @param {boolean} open Si arranca abierta
-     * @returns {string}
+     * buildAccordionSection
+     * ------------------------------------------------------
+     * Construye una sección desplegable reutilizable para:
+     * - resumen ejecutivo
+     * - informe completo
+     * - prompt usado
+     * - definición crítica usada
      */
     function buildAccordionSection(sectionId, title, contentHtml, open = false) {
       return `
@@ -353,7 +350,6 @@ auth_require_role('admin');
           const detailContainer = document.getElementById(`report-detail-${reportId}`);
           if (!detailContainer) return;
 
-          // Evita recargas innecesarias si ya está cargado
           if (detailContainer.dataset.loaded === '1') {
             return;
           }
@@ -423,61 +419,9 @@ auth_require_role('admin');
     }
 
     /**
-     * Muestra el error del informe si existe.
-     *
-     * @param {Object} report Cabecera del informe
-     * @returns {string}
-     */
-    function buildReportErrorHtml(report) {
-      const isFailed = String(report.status || '').toLowerCase() === 'failed';
-      const errorMessage = String(report.error_message || '').trim();
-
-      if (!isFailed || !errorMessage) {
-        return '';
-      }
-
-      return `
-        <div class="alert alert-danger mb-4">
-          <div class="fw-semibold mb-1">Error del informe</div>
-          <div>${escapeHtml(errorMessage)}</div>
-        </div>
-      `;
-    }
-
-    /**
-     * Muestra acciones manuales disponibles para el informe.
-     *
-     * REGLA:
-     * - Solo si el informe está en failed
-     *
-     * @param {Object} report Cabecera del informe
-     * @returns {string}
-     */
-    function buildReportManualActionsHtml(report) {
-      const isFailed = String(report.status || '').toLowerCase() === 'failed';
-
-      if (!isFailed) {
-        return '';
-      }
-
-      return `
-        <div class="mb-4">
-          <button
-            type="button"
-            class="btn btn-sm btn-outline-success btn-mark-report-completed"
-            data-report-id="${escapeHtml(report.id)}"
-          >
-            Marcar como completed
-          </button>
-        </div>
-      `;
-    }
-
-    /**
+     * buildReportContentHtml
+     * ------------------------------------------------------
      * Construye el bloque desplegable del informe completo.
-     *
-     * @param {Object} report Cabecera del informe
-     * @returns {string}
      */
     function buildReportContentHtml(report) {
       const reportId = String(report.id || 'report');
@@ -516,11 +460,9 @@ auth_require_role('admin');
     }
 
     /**
+     * buildIssuesHtml
+     * ------------------------------------------------------
      * Pinta las incidencias analizadas como elementos desplegables.
-     *
-     * @param {Array} issues Lista de incidencias
-     * @param {number|string} reportId ID del informe actual
-     * @returns {string}
      */
     function buildIssuesHtml(issues, reportId) {
       if (!issues || !issues.length) {
@@ -656,8 +598,6 @@ auth_require_role('admin');
 
         targetEl.innerHTML = `
           ${buildReportHeaderHtml(json.report)}
-          ${buildReportErrorHtml(json.report)}
-          ${buildReportManualActionsHtml(json.report)}
           ${buildReportContentHtml(json.report)}
 
           <div>
