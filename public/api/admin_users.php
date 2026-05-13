@@ -47,12 +47,9 @@ try {
      * Recuperamos todos los usuarios y, adicionalmente, la incidencia
      * visible más reciente asignada a cada uno.
      *
-     * QUÉ HACE:
-     * - Para cada usuario busca en issues una incidencia:
-     *   - asignada al jira_account_id del usuario
-     *   - visible = 1
-     * - Ordena por updated_at DESC
-     * - Devuelve solo la primera
+     * IMPORTANTE:
+     * - Usamos comparación BINARY para evitar conflictos de collation
+     *   entre users.jira_account_id e issues.assignee_account_id.
      */
     $sql = "
         SELECT
@@ -70,7 +67,7 @@ try {
             (
                 SELECT i.jira_key
                 FROM issues i
-                WHERE i.assignee_account_id = u.jira_account_id
+                WHERE BINARY i.assignee_account_id = BINARY u.jira_account_id
                   AND i.visible = 1
                 ORDER BY i.updated_at DESC, i.jira_key ASC
                 LIMIT 1
@@ -79,7 +76,7 @@ try {
             (
                 SELECT i.summary
                 FROM issues i
-                WHERE i.assignee_account_id = u.jira_account_id
+                WHERE BINARY i.assignee_account_id = BINARY u.jira_account_id
                   AND i.visible = 1
                 ORDER BY i.updated_at DESC, i.jira_key ASC
                 LIMIT 1
