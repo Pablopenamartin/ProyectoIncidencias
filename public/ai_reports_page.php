@@ -7,7 +7,7 @@
  *
  * RELACIÓN CON OTROS ARCHIVOS:
  * - Usa public/api/ai_reports.php para cargar el listado.
- * - Usa public/api/ai_report_detail.php para cargar el detalle.
+ * - Usa public/api/ai_report_detail.php para cargar el detalle y marcar manualmente completed.
  * - Usa public/api/ai_generate_report.php para lanzar un informe manual.
  * - Incluye public/partials/navbar.php para la navegación común.
  *
@@ -34,7 +34,9 @@ auth_require_role('admin');
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
 
   <style>
-    body { background: #f8f9fa; }
+    body {
+      background: #f8f9fa;
+    }
 
     .reports-wrapper {
       max-width: 1200px;
@@ -144,16 +146,16 @@ auth_require_role('admin');
     // ======================================================
     // CONFIG
     // ======================================================
-    const API_REPORTS        = './api/ai_reports.php';
-    const API_REPORT_DETAIL  = './api/ai_report_detail.php';
-    const API_GENERATE       = './api/ai_generate_report.php';
+    const API_REPORTS       = './api/ai_reports.php';
+    const API_REPORT_DETAIL = './api/ai_report_detail.php';
+    const API_GENERATE      = './api/ai_generate_report.php';
 
     // ======================================================
     // DOM
     // ======================================================
-    const reportsContainer   = document.getElementById('reportsContainer');
-    const reportsStatus      = document.getElementById('reportsStatus');
-    const btnGenerateReport  = document.getElementById('btnGenerateReport');
+    const reportsContainer  = document.getElementById('reportsContainer');
+    const reportsStatus     = document.getElementById('reportsStatus');
+    const btnGenerateReport = document.getElementById('btnGenerateReport');
 
     // ======================================================
     // UTILIDADES
@@ -161,6 +163,9 @@ auth_require_role('admin');
 
     /**
      * Muestra mensajes de estado en pantalla.
+     *
+     * @param {string} message Mensaje visible
+     * @param {string} type Tipo bootstrap textual (muted|success|danger...)
      */
     function setStatus(message, type = 'muted') {
       reportsStatus.className = `small text-${type} mb-3`;
@@ -169,6 +174,9 @@ auth_require_role('admin');
 
     /**
      * Escapa HTML para evitar inyecciones al pintar texto.
+     *
+     * @param {string|number|null|undefined} value Valor a escapar
+     * @returns {string}
      */
     function escapeHtml(value) {
       return String(value ?? '')
@@ -181,6 +189,9 @@ auth_require_role('admin');
 
     /**
      * Devuelve una fecha legible.
+     *
+     * @param {string|null} value Fecha en texto
+     * @returns {string}
      */
     function formatDateTime(value) {
       if (!value) return '—';
@@ -197,6 +208,9 @@ auth_require_role('admin');
 
     /**
      * Devuelve badge visual según estado del informe.
+     *
+     * @param {string} status Estado del informe
+     * @returns {string}
      */
     function getStatusBadge(status) {
       const s = String(status || '').toLowerCase();
@@ -207,11 +221,15 @@ auth_require_role('admin');
       if (s === 'failed') {
         return '<span class="badge text-bg-danger">failed</span>';
       }
+
       return '<span class="badge text-bg-secondary">pending</span>';
     }
 
     /**
      * Devuelve badge visual según criticidad.
+     *
+     * @param {boolean} isCritical Si la incidencia es crítica
+     * @returns {string}
      */
     function getCriticalBadge(isCritical) {
       return isCritical
@@ -263,6 +281,9 @@ auth_require_role('admin');
 
     /**
      * Pinta el listado de informes como accordion.
+     *
+     * @param {Array} items Lista de informes
+     * @returns {void}
      */
     function renderReportsList(items) {
       if (!items || !items.length) {
@@ -276,7 +297,7 @@ auth_require_role('admin');
 
       reportsContainer.innerHTML = items.map((report) => {
         const collapseId = `report-collapse-${report.id}`;
-        const headingId  = `report-heading-${report.id}`;
+        const headingId = `report-heading-${report.id}`;
 
         return `
           <div class="accordion-item mb-3 shadow-sm">
@@ -344,6 +365,9 @@ auth_require_role('admin');
 
     /**
      * Pinta la cabecera del informe.
+     *
+     * @param {Object} report Cabecera del informe
+     * @returns {string}
      */
     function buildReportHeaderHtml(report) {
       return `
@@ -517,7 +541,48 @@ auth_require_role('admin');
     }
 
     /**
+     * Marca manualmente un informe como completed.
+     *
+     * @param {number|string} reportId ID del informe
+     * @returns {Promise<void>}
+     */
+    async function markReportCompletedManually(reportId) {
+      if (!reportId) {
+        return;
+      }
+
+      try {
+        const res = await fetch(API_REPORT_DETAIL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: Number(reportId),
+            action: 'mark_completed'
+          })
+        });
+
+        const json = await res.json();
+
+        if (!json.ok) {
+          alert(json.error || 'No se pudo marcar el informe como completed.');
+          return;
+        }
+
+        setStatus('Informe marcado manualmente como completed.', 'success');
+        await loadReports();
+
+      } catch (err) {
+        console.error(err);
+        alert('Error de red marcando el informe como completed.');
+      }
+    }
+
+    /**
      * Carga y pinta el detalle de un informe.
+     *
+     * @param {number|string} reportId ID del informe
+     * @param {HTMLElement} targetEl Contenedor del detalle
+     * @returns {Promise<void>}
      */
     async function loadReportDetail(reportId, targetEl) {
       targetEl.innerHTML = 'Cargando detalle...';
@@ -542,6 +607,16 @@ auth_require_role('admin');
         `;
 
         targetEl.dataset.loaded = '1';
+
+        // Botón manual: marcar como completed
+        const btnMarkCompleted = targetEl.querySelector('.btn-mark-report-completed');
+        if (btnMarkCompleted) {
+          btnMarkCompleted.addEventListener('click', async () => {
+            const reportIdToMark = btnMarkCompleted.dataset.reportId || '';
+            await markReportCompletedManually(reportIdToMark);
+          });
+        }
+
       } catch (err) {
         console.error(err);
         targetEl.innerHTML = `<div class="text-danger">Error cargando el detalle del informe.</div>`;
@@ -554,6 +629,8 @@ auth_require_role('admin');
 
     /**
      * Carga el listado de informes desde backend.
+     *
+     * @returns {Promise<void>}
      */
     async function loadReports() {
       setStatus('Cargando informes...', 'muted');
@@ -583,6 +660,8 @@ auth_require_role('admin');
 
     /**
      * Lanza la generación manual de un informe IA.
+     *
+     * @returns {Promise<void>}
      */
     async function generateReport() {
       btnGenerateReport.disabled = true;
