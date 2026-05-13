@@ -1,6 +1,6 @@
 <?php
 /**
- * public/ai_reports.php
+ * public/ai_reports_page.php
  * ------------------------------------------------------------------
  * FUNCIÓN GENERAL DEL ARCHIVO:
  * Pantalla de informes IA.
@@ -15,10 +15,14 @@
  * - Mostrar listado de informes ordenado por fecha.
  * - Permitir generar un informe IA manual.
  * - Al hacer click en un informe, desplegar su detalle.
+ * - Mostrar secciones internas del informe en formato desplegable.
+ * - Mostrar incidencias analizadas en formato desplegable.
  */
+
+require_once __DIR__ . '/../app/config/constants.php';
 require_once __DIR__ . '/../app/helpers/Auth.php';
+
 auth_require_role('admin');
-// Solo admin puede acceder a la pantalla de informes IA.
 ?>
 <!doctype html>
 <html lang="es">
@@ -27,7 +31,6 @@ auth_require_role('admin');
   <title>Informes IA</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
 
-  <!-- Bootstrap CSS -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
 
   <style>
@@ -66,6 +69,40 @@ auth_require_role('admin');
     #reportsStatus {
       min-height: 22px;
     }
+
+    /* ======================================================
+       NUEVOS ESTILOS PARA SECCIONES DESPLEGABLES
+       ====================================================== */
+    .report-section-pre {
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-size: .95rem;
+      background: #fff;
+      border: 1px solid #dee2e6;
+      border-radius: .375rem;
+      padding: 1rem;
+    }
+
+    .report-sections-accordion .accordion-button,
+    .issue-details-accordion .accordion-button {
+      font-weight: 600;
+    }
+
+    .issue-summary-line {
+      font-weight: 600;
+    }
+
+    .issue-meta-line {
+      font-size: .9rem;
+      color: #6c757d;
+    }
+
+    .issue-badge-wrap {
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+      flex-wrap: wrap;
+    }
   </style>
 </head>
 <body>
@@ -101,7 +138,6 @@ auth_require_role('admin');
     </div>
   </div>
 
-  <!-- Bootstrap JS -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 
   <script>
@@ -183,6 +219,44 @@ auth_require_role('admin');
         : '<span class="badge text-bg-secondary critical-badge">NO crítica</span>';
     }
 
+    /**
+     * buildAccordionSection
+     * ------------------------------------------------------
+     * Construye una sección desplegable reutilizable para:
+     * - resumen ejecutivo
+     * - informe completo
+     * - prompt usado
+     * - definición crítica usada
+     */
+    function buildAccordionSection(sectionId, title, contentHtml, open = false) {
+      return `
+        <div class="accordion-item">
+          <h2 class="accordion-header" id="heading-${sectionId}">
+            <button
+              class="accordion-button ${open ? '' : 'collapsed'}"
+              type="button"
+              data-bs-toggle="collapse"
+              data-bs-target="#collapse-${sectionId}"
+              aria-expanded="${open ? 'true' : 'false'}"
+              aria-controls="collapse-${sectionId}"
+            >
+              ${escapeHtml(title)}
+            </button>
+          </h2>
+
+          <div
+            id="collapse-${sectionId}"
+            class="accordion-collapse collapse ${open ? 'show' : ''}"
+            aria-labelledby="heading-${sectionId}"
+          >
+            <div class="accordion-body">
+              ${contentHtml}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
     // ======================================================
     // RENDER LISTADO
     // ======================================================
@@ -200,7 +274,7 @@ auth_require_role('admin');
         return;
       }
 
-      reportsContainer.innerHTML = items.map((report, index) => {
+      reportsContainer.innerHTML = items.map((report) => {
         const collapseId = `report-collapse-${report.id}`;
         const headingId  = `report-heading-${report.id}`;
 
@@ -255,7 +329,6 @@ auth_require_role('admin');
           const detailContainer = document.getElementById(`report-detail-${reportId}`);
           if (!detailContainer) return;
 
-          // Evita recargas innecesarias si ya está cargado
           if (detailContainer.dataset.loaded === '1') {
             return;
           }
@@ -322,39 +395,52 @@ auth_require_role('admin');
     }
 
     /**
-     * Pinta resumen + texto completo.
+     * buildReportContentHtml
+     * ------------------------------------------------------
+     * Construye el bloque desplegable del informe completo.
      */
-    function buildReportTextHtml(report) {
-      return `
-        <div class="mb-4">
-          <h6 class="mb-2">Resumen ejecutivo</h6>
-          <div class="report-pre mb-3">${escapeHtml(report.report_summary || 'Sin resumen')}</div>
+    function buildReportContentHtml(report) {
+      const reportId = String(report.id || 'report');
 
-          <h6 class="mb-2">Informe completo</h6>
-          <div class="report-pre">${escapeHtml(report.report_text || 'Sin informe')}</div>
+      return `
+        <div class="accordion report-sections-accordion mb-4" id="report-sections-${escapeHtml(reportId)}">
+          ${buildAccordionSection(
+            `summary-${reportId}`,
+            'Resumen ejecutivo',
+            `<div class="report-section-pre">${escapeHtml(report.report_summary || 'Sin resumen')}</div>`,
+            false
+          )}
+
+          ${buildAccordionSection(
+            `full-${reportId}`,
+            'Informe completo',
+            `<div class="report-section-pre">${escapeHtml(report.report_text || 'Sin informe')}</div>`,
+            false
+          )}
+
+          ${buildAccordionSection(
+            `prompt-${reportId}`,
+            'Prompt usado',
+            `<div class="report-section-pre">${escapeHtml(report.prompt_general_used || '—')}</div>`,
+            false
+          )}
+
+          ${buildAccordionSection(
+            `critical-def-${reportId}`,
+            'Definición de incidencia crítica usada',
+            `<div class="report-section-pre">${escapeHtml(report.def_incidencia_critica_used || '—')}</div>`,
+            false
+          )}
         </div>
       `;
     }
 
     /**
-     * Pinta configuración usada.
+     * buildIssuesHtml
+     * ------------------------------------------------------
+     * Pinta las incidencias analizadas como elementos desplegables.
      */
-    function buildReportPromptHtml(report) {
-      return `
-        <div class="mb-4">
-          <h6 class="mb-2">Prompt usado</h6>
-          <div class="report-pre mb-3">${escapeHtml(report.prompt_general_used || '—')}</div>
-
-          <h6 class="mb-2">Definición de incidencia crítica usada</h6>
-          <div class="report-pre">${escapeHtml(report.def_incidencia_critica_used || '—')}</div>
-        </div>
-      `;
-    }
-
-    /**
-     * Pinta el detalle por incidencia.
-     */
-    function buildIssuesHtml(issues) {
+    function buildIssuesHtml(issues, reportId) {
       if (!issues || !issues.length) {
         return `
           <div class="alert alert-light border text-muted mb-0">
@@ -363,38 +449,69 @@ auth_require_role('admin');
         `;
       }
 
+      const accordionId = `issues-accordion-${reportId}`;
+
       return `
-        <div class="d-flex flex-column gap-3">
-          ${issues.map(issue => `
-            <div class="issue-analysis-card p-3">
-              <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
-                <div>
-                  <div class="fw-semibold">${escapeHtml(issue.jira_key)} - ${escapeHtml(issue.summary || '')}</div>
-                  <div class="small text-muted">
-                    Estado: ${escapeHtml(issue.current_status || '—')}
-                    · Prioridad: ${escapeHtml(issue.current_priority || '—')}
-                    ${issue.score !== null && issue.score !== undefined ? '· Score: ' + escapeHtml(String(issue.score)) : ''}
+        <div class="accordion issue-details-accordion" id="${accordionId}">
+          ${issues.map((issue, index) => {
+            const safeKey = String(issue.jira_key || `issue-${index}`).replace(/[^a-zA-Z0-9_-]/g, '-');
+            const itemId = `${accordionId}-${safeKey}-${index}`;
+            const issueTitle = `${issue.jira_key || '—'} - ${issue.summary || ''}`;
+
+            return `
+              <div class="accordion-item mb-2">
+                <h2 class="accordion-header" id="heading-${itemId}">
+                  <button
+                    class="accordion-button collapsed"
+                    type="button"
+                    data-bs-toggle="collapse"
+                    data-bs-target="#collapse-${itemId}"
+                    aria-expanded="false"
+                    aria-controls="collapse-${itemId}"
+                  >
+                    <div class="w-100 d-flex justify-content-between align-items-start flex-wrap gap-2 pe-3">
+                      <div>
+                        <div class="issue-summary-line">${escapeHtml(issueTitle)}</div>
+                      </div>
+                      <div class="issue-badge-wrap">
+                        ${getCriticalBadge(Number(issue.is_critical) === 1)}
+                      </div>
+                    </div>
+                  </button>
+                </h2>
+
+                <div
+                  id="collapse-${itemId}"
+                  class="accordion-collapse collapse"
+                  aria-labelledby="heading-${itemId}"
+                  data-bs-parent="#${accordionId}"
+                >
+                  <div class="accordion-body">
+                    <div class="issue-meta-line mb-3">
+                      Estado: ${escapeHtml(issue.current_status || '—')}
+                      · Prioridad: ${escapeHtml(issue.current_priority || '—')}
+                      ${issue.score !== null && issue.score !== undefined ? '· Score: ' + escapeHtml(String(issue.score)) : ''}
+                    </div>
+
+                    <div class="mb-3">
+                      <div class="small fw-semibold">Motivo</div>
+                      <div>${escapeHtml(issue.critical_reason || '—')}</div>
+                    </div>
+
+                    <div class="mb-3">
+                      <div class="small fw-semibold">Acción recomendada</div>
+                      <div>${escapeHtml(issue.recommended_action || '—')}</div>
+                    </div>
+
+                    <div>
+                      <div class="small fw-semibold">Análisis</div>
+                      <div>${escapeHtml(issue.analysis_text || '—')}</div>
+                    </div>
                   </div>
                 </div>
-                <div>${getCriticalBadge(Number(issue.is_critical) === 1)}</div>
               </div>
-
-              <div class="mb-2">
-                <div class="small fw-semibold">Motivo</div>
-                <div>${escapeHtml(issue.critical_reason || '—')}</div>
-              </div>
-
-              <div class="mb-2">
-                <div class="small fw-semibold">Acción recomendada</div>
-                <div>${escapeHtml(issue.recommended_action || '—')}</div>
-              </div>
-
-              <div>
-                <div class="small fw-semibold">Análisis</div>
-                <div>${escapeHtml(issue.analysis_text || '—')}</div>
-              </div>
-            </div>
-          `).join('')}
+            `;
+          }).join('')}
         </div>
       `;
     }
@@ -416,12 +533,11 @@ auth_require_role('admin');
 
         targetEl.innerHTML = `
           ${buildReportHeaderHtml(json.report)}
-          ${buildReportTextHtml(json.report)}
-          ${buildReportPromptHtml(json.report)}
+          ${buildReportContentHtml(json.report)}
 
           <div>
             <h6 class="mb-3">Incidencias analizadas</h6>
-            ${buildIssuesHtml(json.issues)}
+            ${buildIssuesHtml(json.issues, reportId)}
           </div>
         `;
 
