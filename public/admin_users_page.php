@@ -375,6 +375,13 @@ auth_require_role('admin');
                                     <input type="text" id="editUserJiraAccountId" class="form-control modal-readonly" readonly>
                                 </div>
 
+                                <div class="col-12">
+                                    <div class="small text-muted mb-1">Trabajando en</div>
+                                    <div id="editUserCurrentIssueBox" class="form-control modal-readonly">
+                                        Ninguna incidencia asignada
+                                    </div>
+                                </div>
+
                                 <!-- Fechas -->
                                 <div class="col-12 col-md-6">
                                     <label for="editUserCreatedAt" class="form-label">Creado</label>
@@ -447,6 +454,7 @@ auth_require_role('admin');
         const editUserRole                        = document.getElementById('editUserRole');
         const editUserIsActive                    = document.getElementById('editUserIsActive');
         const editUserJiraAccountId               = document.getElementById('editUserJiraAccountId');
+        const editUserCurrentIssueBox             = document.getElementById('editUserCurrentIssueBox');
         const editUserPhoneNumber                 = document.getElementById('editUserPhoneNumber');
         const editUserPhoneNotificationsEnabled   = document.getElementById('editUserPhoneNotificationsEnabled');
         const editUserCreatedAt                   = document.getElementById('editUserCreatedAt');
@@ -500,6 +508,33 @@ auth_require_role('admin');
             const second = parts[1]?.charAt(0) || '';
 
             return (first + second).toUpperCase() || '--';
+        }
+        /**
+         * Devuelve el HTML de la incidencia actual asignada al usuario.
+         *
+         * QUÉ HACE:
+         * - Si hay current_issue_key y current_issue_url, crea enlace a Jira
+         * - Si no hay incidencia asignada, muestra texto neutro
+         *
+         * @param {Object} user Usuario actual del modal
+         * @returns {string}
+         */
+        function buildCurrentIssueHtml(user) {
+            const key = String(user.current_issue_key || '').trim();
+            const summary = String(user.current_issue_summary || '').trim();
+            const url = String(user.current_issue_url || '').trim();
+
+            if (!key || !url) {
+                return 'Ninguna incidencia asignada';
+            }
+
+            const summaryText = summary ? ` — ${escapeHtml(summary)}` : '';
+
+            return `
+                <a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">
+                    ${escapeHtml(key)}
+                </a>${summaryText}
+            `;
         }
 
         /**
@@ -744,6 +779,7 @@ auth_require_role('admin');
             editUserRole.value = user.role || 'operador';
             editUserIsActive.checked = Number(user.is_active) === 1;
             editUserJiraAccountId.value = user.jira_account_id || '';
+            editUserCurrentIssueBox.innerHTML = buildCurrentIssueHtml(user);
             editUserPhoneNumber.value = user.phone_number || '';
             editUserPhoneNotificationsEnabled.checked = Number(user.phone_notifications_enabled) === 1;
             editUserCreatedAt.value = user.created_at || '';
@@ -816,6 +852,7 @@ auth_require_role('admin');
                     editUserRole.value = updated.role || 'operador';
                     editUserIsActive.checked = Number(updated.is_active) === 1;
                     editUserJiraAccountId.value = updated.jira_account_id || '';
+                    editUserCurrentIssueBox.innerHTML = buildCurrentIssueHtml(updated);
                     editUserPhoneNumber.value = updated.phone_number || '';
                     editUserPhoneNotificationsEnabled.checked = Number(updated.phone_notifications_enabled) === 1;
                     editUserCreatedAt.value = updated.created_at || '';
