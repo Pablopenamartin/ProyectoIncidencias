@@ -3,31 +3,29 @@
  * public/api/ai_report_detail.php
  * =========================================================
  * FUNCIÓN GENERAL DEL ARCHIVO:
- * Endpoint para trabajar con un informe IA concreto.
+ * Endpoint para obtener detalle de informes IA.
  *
  * RELACIÓN CON OTROS ARCHIVOS:
- * - Usa app/helpers/Auth.php para restringir acceso a administradores.
- * - Usa app/helpers/Utils.php para respuestas JSON homogéneas.
- * - Usa app/models/AiReportModel.php para:
- *   - leer el informe por ID
- *   - leer sus incidencias
- *   - marcarlo manualmente como completed
+ * - Usa Auth.php para restringir acceso a administradores.
+ * - Usa Utils.php para respuestas JSON homogéneas.
+ * - Usa AiReportModel.php para informes de incidencia.
+ * - Usa database.php para consultar informes 12H en ai_queue_reports.
  *
  * FUNCIONES PRINCIPALES:
  * - GET:
- *   - devuelve cabecera del informe
- *   - devuelve incidencias analizadas del informe
+ *   - type=incidencia -> detalle desde ai_reports + ai_report_issues
+ *   - type=12h        -> detalle desde ai_queue_reports
  *
  * - POST:
- *   - permite ejecutar acciones sobre el informe
- *   - action = mark_completed
+ *   - action=mark_completed
+ *   - permite marcar manualmente como completed informes failed
  *
  * NOTA:
- * - El cambio manual a completed NO borra error_message,
- *   para mantener trazabilidad del error original.
+ * - No borra error_message para mantener trazabilidad.
  */
 
 require_once __DIR__ . '/../../app/config/constants.php';
+require_once __DIR__ . '/../../app/config/database.php';
 require_once __DIR__ . '/../../app/helpers/Utils.php';
 require_once __DIR__ . '/../../app/helpers/Auth.php';
 require_once __DIR__ . '/../../app/models/AiReportModel.php';
@@ -39,7 +37,7 @@ auth_require_api_role('admin');
 /**
  * readJsonBodyAiReportDetail
  * --------------------------------------------------------------
- * Lee el body JSON de la petición y lo devuelve como array.
+ * Lee el body JSON de una petición POST.
  *
  * @return array
  */
@@ -56,15 +54,96 @@ function readJsonBodyAiReportDetail(): array
     return is_array($json) ? $json : [];
 }
 
+/**
+ * getQueueReportById
+ * --------------------------------------------------------------
+ * Recupera la cabecera completa de un informe 12H.
+ *
+ * @param PDO $pdo Conexión PDO
+ * @param int $reportId ID del informe 12H
+ * @return array|null
+ */
+function getQueueReportById(PDO $pdo, int $reportId): ?array
+{
+    $sql = "
+        SELECT
+            id,
+            report_name,
+            status,
+            report_type,
+            period_start,
+            period_end,
+            period_label,
+            trigger_source,
+            total_open_start,
+            total_open_end,
+            total_incoming,
+            total_resolved,
+            total_unassigned,
+            total_unassigned_critical,
+            avg_resolution_time_sec,
+            max_resolution_time_sec,
+            avg_time_to_assign_sec,
+            metrics_json,
+            report_summary,
+            report_text,
+            prompt_used,
+            raw_response_json,
+            error_message,
+            started_at,
+            completed_at,
+            created_at
+        FROM ai_queue_reports
+        WHERE id = :id
+        LIMIT 1
+    ";
+
+    $st = $pdo->prepare($sql);
+    $st->execute([
+        ':id' => $reportId
+    ]);
+
+    $row = $st->fetch();
+
+    return $row ?: null;
+}
+
+/**
+ * markQueueReportCompletedManually
+ * --------------------------------------------------------------
+ * Marca manualmente un informe 12H como completed.
+ *
+ * @param PDO $pdo Conexión PDO
+ * @param int $reportId ID del informe 12H
+ * @return void
+ */
+function markQueueReportCompletedManually(PDO $pdo, int $reportId): void
+{
+    $sql = "
+        UPDATE ai_queue_reports
+        SET
+            status = 'completed',
+            completed_at = NOW()
+        WHERE id = :id
+    ";
+
+    $st = $pdo->prepare($sql);
+    $st->execute([
+        ':id' => $reportId
+    ]);
+}
+
 try {
     $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+    $pdo = getPDO();
     $model = new AiReportModel();
 
     //----------------------------------------------------------
-    // GET -> obtener detalle del informe
+    // GET -> obtener detalle
     //----------------------------------------------------------
     if ($method === 'GET') {
         $reportId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+        $type = strtolower(trim((string)($_GET['type'] ?? 'incidencia')));
 
         if ($reportId <= 0) {
             json_response([
@@ -73,6 +152,30 @@ try {
             ], 400);
         }
 
+        //------------------------------------------------------
+        // Detalle informe 12H
+        //------------------------------------------------------
+        if ($type === '12h') {
+            $report = getQueueReportById($pdo, $reportId);
+
+            if (!$report) {
+                json_response([
+                    'ok'    => false,
+                    'error' => 'No existe el informe 12H solicitado.'
+                ], 404);
+            }
+
+            json_response([
+                'ok'          => true,
+                'report_type' => '12h',
+                'report'      => $report,
+                'issues'      => [],
+            ]);
+        }
+
+        //------------------------------------------------------
+        // Detalle informe incidencia
+        //------------------------------------------------------
         $report = $model->getReportById($reportId);
 
         if (!$report) {
@@ -85,14 +188,15 @@ try {
         $issues = $model->getReportIssues($reportId);
 
         json_response([
-            'ok'     => true,
-            'report' => $report,
-            'issues' => $issues,
+            'ok'          => true,
+            'report_type' => 'incidencia',
+            'report'      => $report,
+            'issues'      => $issues,
         ]);
     }
 
     //----------------------------------------------------------
-    // POST -> acciones sobre el informe
+    // POST -> acciones manuales
     //----------------------------------------------------------
     if ($method === 'POST') {
         $data = readJsonBodyAiReportDetail();
@@ -105,7 +209,8 @@ try {
         }
 
         $reportId = isset($data['id']) ? (int)$data['id'] : 0;
-        $action   = trim((string)($data['action'] ?? ''));
+        $type = strtolower(trim((string)($data['type'] ?? 'incidencia')));
+        $action = trim((string)($data['action'] ?? ''));
 
         if ($reportId <= 0) {
             json_response([
@@ -121,44 +226,55 @@ try {
             ], 400);
         }
 
-        $report = $model->getReportById($reportId);
-
-        if (!$report) {
-            json_response([
-                'ok'    => false,
-                'error' => 'No existe el informe indicado.'
-            ], 404);
-        }
-
         //------------------------------------------------------
-        // Acción: marcar manualmente como completed
+        // Marcar como completed
         //------------------------------------------------------
         if ($action === 'mark_completed') {
-            $model->markCompletedManually($reportId);
+            if ($type === '12h') {
+                $report = getQueueReportById($pdo, $reportId);
 
-            $updatedReport = $model->getReportById($reportId);
-            $issues = $model->getReportIssues($reportId);
+                if (!$report) {
+                    json_response([
+                        'ok'    => false,
+                        'error' => 'No existe el informe 12H indicado.'
+                    ], 404);
+                }
+
+                markQueueReportCompletedManually($pdo, $reportId);
+
+                json_response([
+                    'ok'      => true,
+                    'message' => 'Informe 12H marcado manualmente como completed.',
+                    'report'  => getQueueReportById($pdo, $reportId),
+                    'issues'  => [],
+                ]);
+            }
+
+            $report = $model->getReportById($reportId);
+
+            if (!$report) {
+                json_response([
+                    'ok'    => false,
+                    'error' => 'No existe el informe indicado.'
+                ], 404);
+            }
+
+            $model->markCompletedManually($reportId);
 
             json_response([
                 'ok'      => true,
                 'message' => 'Informe marcado manualmente como completed.',
-                'report'  => $updatedReport,
-                'issues'  => $issues,
+                'report'  => $model->getReportById($reportId),
+                'issues'  => $model->getReportIssues($reportId),
             ]);
         }
 
-        //------------------------------------------------------
-        // Acción no soportada
-        //------------------------------------------------------
         json_response([
             'ok'    => false,
             'error' => 'Acción no soportada.'
         ], 400);
     }
 
-    //----------------------------------------------------------
-    // Método no permitido
-    //----------------------------------------------------------
     json_response([
         'ok'    => false,
         'error' => 'Método no permitido.'
