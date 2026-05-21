@@ -125,13 +125,32 @@ auth_require_role('admin');
 
           <div class="d-flex align-items-center gap-2">
             <button id="btnGenerateReport" class="btn btn-primary btn-sm">
-              Generar informe IA
+              Generar informe incidencia
+            </button>
+
+            <button id="btnGenerateQueueReport" class="btn btn-outline-dark btn-sm">
+              Generar informe 12H
             </button>
           </div>
         </div>
 
         <!-- Estado -->
         <div id="reportsStatus" class="small text-muted mb-3"></div>
+
+        <!-- Filtros de tipo de informe -->
+        <div class="d-flex gap-2 flex-wrap mb-3">
+          <button type="button" class="btn btn-sm btn-primary report-filter-btn" data-filter="all">
+            Todos
+          </button>
+
+          <button type="button" class="btn btn-sm btn-outline-primary report-filter-btn" data-filter="incidencia">
+            Incidencias
+          </button>
+
+          <button type="button" class="btn btn-sm btn-outline-dark report-filter-btn" data-filter="12h">
+            12H
+          </button>
+        </div>
 
         <!-- Listado -->
         <div id="reportsContainer" class="accordion"></div>
@@ -149,13 +168,23 @@ auth_require_role('admin');
     const API_REPORTS       = './api/ai_reports.php';
     const API_REPORT_DETAIL = './api/ai_report_detail.php';
     const API_GENERATE      = './api/ai_generate_report.php';
+    const API_QUEUE_REPORT = './api/generate_queue_report.php';
 
     // ======================================================
     // DOM
     // ======================================================
     const reportsContainer  = document.getElementById('reportsContainer');
     const reportsStatus     = document.getElementById('reportsStatus');
-    const btnGenerateReport = document.getElementById('btnGenerateReport');
+    const btnGenerateReport = document.getElementById('btnGenerateReport');  
+    const btnGenerateQueueReport = document.getElementById('btnGenerateQueueReport');
+
+    // Cache local de informes para poder filtrar sin volver a pedir al backend.
+    let reportsCache = [];
+
+    // Filtro activo actual.
+    // Valores posibles: all | incidencia | 12h
+    let activeReportFilter = 'all';
+
 
     // ======================================================
     // UTILIDADES
@@ -236,6 +265,59 @@ auth_require_role('admin');
         ? '<span class="badge text-bg-danger critical-badge">CRÍTICA</span>'
         : '<span class="badge text-bg-secondary critical-badge">NO crítica</span>';
     }
+    /**
+    * getFilteredReports
+    * ------------------------------------------------------
+    * Devuelve los informes filtrados según el tipo seleccionado.
+    *
+    * TIPOS:
+    * - all        -> todos los informes
+    * - incidencia -> informes actuales de incidencias críticas
+    * - 12h        -> informes ejecutivos de evolución de cola
+    *
+    * @returns {Array}
+    */
+    function getFilteredReports() {
+      if (activeReportFilter === 'all') {
+        return reportsCache;
+      }
+
+      return reportsCache.filter((report) => {
+        return String(report.report_type || '').toLowerCase() === activeReportFilter;
+      });
+    }
+
+    /**
+    * updateReportFilterButtons
+    * ------------------------------------------------------
+    * Actualiza visualmente los botones de filtro.
+    *
+    * QUÉ HACE:
+    * - El botón activo queda relleno.
+    * - Los botones inactivos quedan en outline.
+    *
+    * @returns {void}
+    */
+    function updateReportFilterButtons() {
+      document.querySelectorAll('.report-filter-btn').forEach((btn) => {
+        const filter = btn.dataset.filter || 'all';
+        const isActive = filter === activeReportFilter;
+
+        btn.classList.remove(
+          'btn-primary',
+          'btn-outline-primary',
+          'btn-dark',
+          'btn-outline-dark'
+        );
+
+        if (filter === '12h') {
+          btn.classList.add(isActive ? 'btn-dark' : 'btn-outline-dark');
+          return;
+        }
+
+        btn.classList.add(isActive ? 'btn-primary' : 'btn-outline-primary');
+      });
+    }
 
     /**
      * buildAccordionSection
@@ -285,79 +367,127 @@ auth_require_role('admin');
      * @param {Array} items Lista de informes
      * @returns {void}
      */
-    function renderReportsList(items) {
-      if (!items || !items.length) {
-        reportsContainer.innerHTML = `
-          <div class="alert alert-light border text-muted">
-            No hay informes generados todavía.
-          </div>
+   /**
+   * renderReportsList
+   * ------------------------------------------------------
+   * Pinta el listado de informes en formato accordion.
+   *
+   * QUÉ HACE:
+   * - Muestra informes incidencia e informes 12H.
+   * - Añade badge visual por tipo.
+   * - Usa claves DOM compuestas por tipo + id para evitar colisiones.
+   * - Carga el detalle bajo demanda.
+   *
+   * @param {Array} items Lista de informes devuelta por backend
+   * @returns {void}
+   */
+  function renderReportsList(items) {
+    if (!items || !items.length) {
+      reportsContainer.innerHTML = `
+        <div class="alert alert-light border text-muted">
+          No hay informes generados todavía.
+        </div>
+      `;
+      return;
+    }
+
+    reportsContainer.innerHTML = items.map((report) => {
+      const reportType = String(report.report_type || 'incidencia').toLowerCase();
+
+      // ID seguro para DOM. Evita conflictos entre informes de tablas distintas.
+      const domKey = `${reportType}-${report.id}`.replace(/[^a-zA-Z0-9_-]/g, '-');
+
+      const collapseId = `report-collapse-${domKey}`;
+      const headingId  = `report-heading-${domKey}`;
+      const detailId   = `report-detail-${domKey}`;
+
+      const typeBadge = reportType === '12h'
+        ? '<span class="badge text-bg-dark me-2">12H</span>'
+        : '<span class="badge text-bg-primary me-2">INCIDENCIA</span>';
+
+      const metaText = reportType === '12h'
+        ? `
+          ${escapeHtml(formatDateTime(report.created_at))}
+          · Informe evolución cola
+        `
+        : `
+          ${escapeHtml(formatDateTime(report.created_at))}
+          · ${escapeHtml(String(report.total_issues_analyzed ?? 0))} incidencias
+          · ${escapeHtml(String(report.total_critical_detected ?? 0))} críticas
         `;
-        return;
-      }
 
-      reportsContainer.innerHTML = items.map((report) => {
-        const collapseId = `report-collapse-${report.id}`;
-        const headingId = `report-heading-${report.id}`;
-
-        return `
-          <div class="accordion-item mb-3 shadow-sm">
-            <h2 class="accordion-header" id="${headingId}">
-              <button
-                class="accordion-button collapsed"
-                type="button"
-                data-bs-toggle="collapse"
-                data-bs-target="#${collapseId}"
-                aria-expanded="false"
-                aria-controls="${collapseId}"
-                data-report-id="${report.id}"
-              >
-                <div class="w-100 d-flex justify-content-between align-items-center flex-wrap gap-2 pe-3">
-                  <div>
-                    <div class="fw-semibold">${escapeHtml(report.report_name || ('Informe #' + report.id))}</div>
-                    <div class="report-meta">
-                      ${escapeHtml(formatDateTime(report.created_at))}
-                      · ${escapeHtml(String(report.total_issues_analyzed ?? 0))} incidencias
-                      · ${escapeHtml(String(report.total_critical_detected ?? 0))} críticas
-                    </div>
-                  </div>
-                  <div>${getStatusBadge(report.status)}</div>
-                </div>
-              </button>
-            </h2>
-
-            <div
-              id="${collapseId}"
-              class="accordion-collapse collapse"
-              aria-labelledby="${headingId}"
-              data-bs-parent="#reportsContainer"
+      return `
+        <div class="accordion-item mb-3 shadow-sm">
+          <h2 class="accordion-header" id="${headingId}">
+            <button
+              class="accordion-button collapsed"
+              type="button"
+              data-bs-toggle="collapse"
+              data-bs-target="#${collapseId}"
+              aria-expanded="false"
+              aria-controls="${collapseId}"
+              data-report-id="${escapeHtml(report.id)}"
+              data-report-type="${escapeHtml(reportType)}"
             >
-              <div class="accordion-body">
-                <div id="report-detail-${report.id}" class="text-muted small">
-                  Cargando detalle...
+              <div class="w-100 d-flex justify-content-between align-items-center flex-wrap gap-2 pe-3">
+                <div>
+                  <div class="fw-semibold">
+                    ${typeBadge}
+                    ${escapeHtml(report.report_name || ('Informe #' + report.id))}
+                  </div>
+
+                  <div class="report-meta">
+                    ${metaText}
+                  </div>
                 </div>
+
+                <div>
+                  ${getStatusBadge(report.status)}
+                </div>
+              </div>
+            </button>
+          </h2>
+
+          <div
+            id="${collapseId}"
+            class="accordion-collapse collapse"
+            aria-labelledby="${headingId}"
+            data-bs-parent="#reportsContainer"
+          >
+            <div class="accordion-body">
+              <div id="${detailId}" class="text-muted small">
+                Cargando detalle...
               </div>
             </div>
           </div>
-        `;
-      }).join('');
+        </div>
+      `;
+    }).join('');
 
-      // Cargar detalle al desplegar
-      reportsContainer.querySelectorAll('.accordion-button').forEach(btn => {
-        btn.addEventListener('click', async () => {
-          const reportId = btn.dataset.reportId;
-          if (!reportId) return;
+    reportsContainer.querySelectorAll('.accordion-button').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const reportId = btn.dataset.reportId;
+        const reportType = btn.dataset.reportType || 'incidencia';
 
-          const detailContainer = document.getElementById(`report-detail-${reportId}`);
-          if (!detailContainer) return;
+        if (!reportId) {
+          return;
+        }
 
-          if (detailContainer.dataset.loaded === '1') {
-            return;
-          }
+        const domKey = `${reportType}-${reportId}`.replace(/[^a-zA-Z0-9_-]/g, '-');
+        const detailContainer = document.getElementById(`report-detail-${domKey}`);
 
-          await loadReportDetail(reportId, detailContainer);
-        });
+        if (!detailContainer) {
+          return;
+        }
+
+        if (detailContainer.dataset.loaded === '1') {
+          return;
+        }
+
+        await loadReportDetail(reportId, reportType, detailContainer);
       });
-    }
+    });
+  }
 
     // ======================================================
     // RENDER DETALLE
@@ -453,6 +583,96 @@ auth_require_role('admin');
             `critical-def-${reportId}`,
             'Definición de incidencia crítica usada',
             `<div class="report-section-pre">${escapeHtml(report.def_incidencia_critica_used || '—')}</div>`,
+            false
+          )}
+        </div>
+      `;
+    }
+
+        /**
+     * buildQueueReportContentHtml
+     * ------------------------------------------------------
+     * Construye el detalle visual de un informe 12H.
+     *
+     * @param {Object} report Informe 12H
+     * @returns {string}
+     */
+    function buildQueueReportContentHtml(report) {
+      let metrics = {};
+
+      try {
+        metrics = report.metrics_json ? JSON.parse(report.metrics_json) : {};
+      } catch (e) {
+        metrics = {};
+      }
+
+      return `
+        <div class="mb-4">
+          <div class="row g-3">
+            <div class="col-12 col-md-3">
+              <div class="card">
+                <div class="card-body py-2">
+                  <div class="small text-muted">Abiertas inicio</div>
+                  <div class="fw-semibold">${escapeHtml(String(report.total_open_start ?? 0))}</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="col-12 col-md-3">
+              <div class="card">
+                <div class="card-body py-2">
+                  <div class="small text-muted">Abiertas fin</div>
+                  <div class="fw-semibold">${escapeHtml(String(report.total_open_end ?? 0))}</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="col-12 col-md-3">
+              <div class="card">
+                <div class="card-body py-2">
+                  <div class="small text-muted">Entrantes</div>
+                  <div class="fw-semibold">${escapeHtml(String(report.total_incoming ?? 0))}</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="col-12 col-md-3">
+              <div class="card">
+                <div class="card-body py-2">
+                  <div class="small text-muted">Resueltas</div>
+                  <div class="fw-semibold">${escapeHtml(String(report.total_resolved ?? 0))}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="accordion report-sections-accordion mb-4" id="queue-report-sections-${escapeHtml(report.id)}">
+          ${buildAccordionSection(
+            `queue-summary-${report.id}`,
+            'Resumen ejecutivo',
+            `<div class="report-section-pre">${escapeHtml(report.report_summary || 'Sin resumen')}</div>`,
+            false
+          )}
+
+          ${buildAccordionSection(
+            `queue-full-${report.id}`,
+            'Informe completo',
+            `<div class="report-section-pre">${escapeHtml(report.report_text || 'Sin informe')}</div>`,
+            false
+          )}
+
+          ${buildAccordionSection(
+            `queue-metrics-${report.id}`,
+            'Métricas calculadas',
+            `<div class="report-section-pre">${escapeHtml(JSON.stringify(metrics, null, 2))}</div>`,
+            false
+          )}
+
+          ${buildAccordionSection(
+            `queue-prompt-${report.id}`,
+            'Prompt usado',
+            `<div class="report-section-pre">${escapeHtml(report.prompt_used || '—')}</div>`,
             false
           )}
         </div>
@@ -557,6 +777,7 @@ auth_require_role('admin');
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             id: Number(reportId),
+            type: reportType,
             action: 'mark_completed'
           })
         });
@@ -577,18 +798,28 @@ auth_require_role('admin');
       }
     }
 
-    /**
+      /**
+     * loadReportDetail
+     * ------------------------------------------------------
      * Carga y pinta el detalle de un informe.
      *
+     * SOPORTA:
+     * - Informes incidencia
+     * - Informes 12H
+     *
      * @param {number|string} reportId ID del informe
+     * @param {string} reportType incidencia | 12h
      * @param {HTMLElement} targetEl Contenedor del detalle
      * @returns {Promise<void>}
      */
-    async function loadReportDetail(reportId, targetEl) {
+    async function loadReportDetail(reportId, reportType, targetEl) {
       targetEl.innerHTML = 'Cargando detalle...';
 
       try {
-        const res = await fetch(`${API_REPORT_DETAIL}?id=${encodeURIComponent(reportId)}&t=${Date.now()}`);
+        const res = await fetch(
+          `${API_REPORT_DETAIL}?id=${encodeURIComponent(reportId)}&type=${encodeURIComponent(reportType)}&t=${Date.now()}`
+        );
+
         const json = await res.json();
 
         if (!json.ok) {
@@ -596,24 +827,36 @@ auth_require_role('admin');
           return;
         }
 
-        targetEl.innerHTML = `
-          ${buildReportHeaderHtml(json.report)}
-          ${buildReportContentHtml(json.report)}
+        const isQueueReport = String(reportType || '').toLowerCase() === '12h';
 
-          <div>
-            <h6 class="mb-3">Incidencias analizadas</h6>
-            ${buildIssuesHtml(json.issues, reportId)}
-          </div>
-        `;
+        if (isQueueReport) {
+          targetEl.innerHTML = `
+            ${buildReportHeaderHtml(json.report)}
+            ${buildReportErrorHtml(json.report)}
+            ${buildReportManualActionsHtml(json.report)}
+            ${buildQueueReportContentHtml(json.report)}
+          `;
+        } else {
+          targetEl.innerHTML = `
+            ${buildReportHeaderHtml(json.report)}
+            ${buildReportErrorHtml(json.report)}
+            ${buildReportManualActionsHtml(json.report)}
+            ${buildReportContentHtml(json.report)}
+
+            <div>
+              <h6 class="mb-3">Incidencias analizadas</h6>
+              ${buildIssuesHtml(json.issues, reportId)}
+            </div>
+          `;
+        }
 
         targetEl.dataset.loaded = '1';
 
-        // Botón manual: marcar como completed
         const btnMarkCompleted = targetEl.querySelector('.btn-mark-report-completed');
+
         if (btnMarkCompleted) {
           btnMarkCompleted.addEventListener('click', async () => {
-            const reportIdToMark = btnMarkCompleted.dataset.reportId || '';
-            await markReportCompletedManually(reportIdToMark);
+            await markReportCompletedManually(reportId, reportType);
           });
         }
 
@@ -645,8 +888,16 @@ auth_require_role('admin');
           return;
         }
 
-        renderReportsList(json.data || []);
-        setStatus(`Informes cargados: ${json.count ?? 0}`, 'success');
+        // Guardamos todos los informes en caché.
+        // Luego renderizamos solo los que encajan con el filtro activo.
+        reportsCache = Array.isArray(json.data) ? json.data : [];
+
+        renderReportsList(getFilteredReports());
+
+        setStatus(
+          `Informes cargados: ${reportsCache.length} · Mostrando: ${getFilteredReports().length}`,
+          'success'
+        );
       } catch (err) {
         console.error(err);
         reportsContainer.innerHTML = '';
@@ -693,16 +944,64 @@ auth_require_role('admin');
         btnGenerateReport.disabled = false;
       }
     }
+    /**
+   * generateQueueReport
+   * ------------------------------------------------------
+   * Genera el informe 12H manualmente.
+   */
+  async function generateQueueReport() {
+    btnGenerateQueueReport.disabled = true;
+    setStatus('Generando informe 12H...', 'muted');
+
+    try {
+      const res = await fetch(API_QUEUE_REPORT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      const json = await res.json();
+
+      if (!json.ok) {
+        setStatus(json.error || 'Error generando informe 12H.', 'danger');
+        return;
+      }
+
+      setStatus('Informe 12H generado correctamente.', 'success');
+      await loadReports();
+
+    } catch (err) {
+      console.error(err);
+      setStatus('Error de red generando informe 12H.', 'danger');
+    } finally {
+      btnGenerateQueueReport.disabled = false;
+    }
+  }
 
     // ======================================================
     // EVENTOS
     // ======================================================
 
     btnGenerateReport.addEventListener('click', generateReport);
+    btnGenerateQueueReport.addEventListener('click', generateQueueReport);
+    // Filtros de tipo de informe: Todos / Incidencias / 12H
+    document.querySelectorAll('.report-filter-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        activeReportFilter = btn.dataset.filter || 'all';
+
+        updateReportFilterButtons();
+        renderReportsList(getFilteredReports());
+
+        setStatus(
+          `Informes cargados: ${reportsCache.length} · Mostrando: ${getFilteredReports().length}`,
+          'success'
+        );
+      });
+    });
 
     // ======================================================
     // INIT
     // ======================================================
+    updateReportFilterButtons();
     loadReports();
   </script>
 </body>
