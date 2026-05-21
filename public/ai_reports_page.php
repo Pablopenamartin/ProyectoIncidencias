@@ -797,7 +797,68 @@ auth_require_role('admin');
         alert('Error de red marcando el informe como completed.');
       }
     }
+      /**
+       * buildReportErrorHtml
+       * ------------------------------------------------------
+       * Muestra el error del informe si existe.
+       *
+       * QUÉ HACE:
+       * - Si el informe está en failed y tiene error_message,
+       *   muestra una alerta roja con el motivo del fallo.
+       * - Si no está failed o no hay error_message,
+       *   no pinta nada.
+       *
+       * @param {Object} report Cabecera del informe
+       * @returns {string} HTML del bloque de error o cadena vacía
+       */
+      function buildReportErrorHtml(report) {
+        const isFailed = String(report.status || '').toLowerCase() === 'failed';
+        const errorMessage = String(report.error_message || '').trim();
 
+        if (!isFailed || !errorMessage) {
+          return '';
+        }
+
+        return `
+          <div class="alert alert-danger mb-4">
+            <div class="fw-semibold mb-1">Error del informe</div>
+            <div>${escapeHtml(errorMessage)}</div>
+          </div>
+        `;
+      }
+
+      /**
+       * buildReportManualActionsHtml
+       * ------------------------------------------------------
+       * Muestra acciones manuales disponibles para el informe.
+       *
+       * QUÉ HACE:
+       * - Si el informe está en failed, muestra el botón:
+       *   "Marcar como completed".
+       * - Si el informe no está en failed, no pinta nada.
+       *
+       * @param {Object} report Cabecera del informe
+       * @returns {string} HTML del botón manual o cadena vacía
+       */
+      function buildReportManualActionsHtml(report) {
+        const isFailed = String(report.status || '').toLowerCase() === 'failed';
+
+        if (!isFailed) {
+          return '';
+        }
+
+        return `
+          <div class="mb-4">
+            <button
+              type="button"
+              class="btn btn-sm btn-outline-success btn-mark-report-completed"
+              data-report-id="${escapeHtml(report.id)}"
+            >
+              Marcar como completed
+            </button>
+          </div>
+        `;
+      }
       /**
      * loadReportDetail
      * ------------------------------------------------------
