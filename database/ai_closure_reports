@@ -1,0 +1,18 @@
+CREATE TABLE ai_closure_reports (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+
+    issue_id BIGINT NOT NULL,
+    jira_key VARCHAR(50) NOT NULL,
+
+    rating INT NOT NULL,
+
+    report_summary TEXT,
+    report_text LONGTEXT,
+    raw_response_json LONGTEXT,
+
+    trigger_source VARCHAR(50), -- manual / auto
+
+    started_at DATETIME,
+    completed_at DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
