@@ -1,0 +1,1078 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Guía de la Aplicación Jira Sync + IA</title>
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --card: #ffffff;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --primary: #0d6efd;
+      --primary-dark: #084298;
+      --border: #d9e2ef;
+      --code-bg: #111827;
+      --code-text: #e5e7eb;
+      --soft-blue: #eaf2ff;
+      --soft-green: #eafaf1;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: Segoe UI, Roboto, Arial, sans-serif;
+      color: var(--text);
+      background: var(--bg);
+      line-height: 1.6;
+    }
+
+    header {
+      background: linear-gradient(135deg, #0d6efd, #0a58ca);
+      color: #fff;
+      padding: 42px 24px;
+      border-bottom: 5px solid #084298;
+    }
+
+    header .wrap,
+    main {
+      max-width: 1180px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 2.2rem;
+    }
+
+    header p {
+      margin: 0;
+      opacity: .95;
+    }
+
+    main {
+      padding: 28px 20px 60px;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 285px 1fr;
+      gap: 22px;
+      align-items: start;
+    }
+
+    nav {
+      position: sticky;
+      top: 18px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px;
+      box-shadow: 0 8px 24px rgba(15, 23, 42, .06);
+      max-height: calc(100vh - 36px);
+      overflow: auto;
+    }
+
+    nav h2 {
+      font-size: .95rem;
+      margin: 0 0 10px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+
+    nav a {
+      display: block;
+      color: var(--primary-dark);
+      text-decoration: none;
+      padding: 6px 8px;
+      border-radius: 8px;
+      font-size: .92rem;
+    }
+
+    nav a:hover {
+      background: var(--soft-blue);
+    }
+
+    section {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 24px;
+      margin-bottom: 22px;
+      box-shadow: 0 8px 24px rgba(15, 23, 42, .05);
+    }
+
+    h2 {
+      margin: 0 0 16px;
+      color: #0f172a;
+      font-size: 1.55rem;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 8px;
+    }
+
+    h3 {
+      margin-top: 22px;
+      color: #1d4ed8;
+      font-size: 1.15rem;
+    }
+
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .pill {
+      background: rgba(255,255,255,.18);
+      border: 1px solid rgba(255,255,255,.35);
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: .9rem;
+    }
+
+    code {
+      background: #eef2ff;
+      color: #1e3a8a;
+      padding: 2px 5px;
+      border-radius: 5px;
+    }
+
+    pre {
+      background: var(--code-bg);
+      color: var(--code-text);
+      padding: 14px;
+      border-radius: 10px;
+      overflow: auto;
+      font-size: .9rem;
+      line-height: 1.45;
+    }
+
+    pre code {
+      background: transparent;
+      color: inherit;
+      padding: 0;
+    }
+
+    ul {
+      padding-left: 22px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .card-mini {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+      background: #fbfdff;
+    }
+
+    .card-mini h4 {
+      margin: 0 0 8px;
+      color: #0f172a;
+    }
+
+    .note {
+      padding: 14px 16px;
+      border-radius: 10px;
+      margin: 14px 0;
+      border: 1px solid var(--border);
+      background: var(--soft-green);
+    }
+
+    .file-list {
+      columns: 2;
+      column-gap: 28px;
+    }
+
+    .file-list li {
+      break-inside: avoid;
+      margin-bottom: 6px;
+    }
+
+    @media (max-width: 920px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+
+      nav {
+        position: static;
+        max-height: none;
+      }
+
+      .grid {
+        grid-template-columns: 1fr;
+      }
+
+      .file-list {
+        columns: 1;
+      }
+    }
+
+    @media print {
+      nav {
+        display: none;
+      }
+
+      .layout {
+        display: block;
+      }
+
+      section {
+        box-shadow: none;
+        break-inside: avoid;
+      }
+
+      header {
+        print-color-adjust: exact;
+      }
+    }
+  </style>
+</head>
+
+<body>
+<header>
+  <div class="wrap">
+    <h1>Guía de la Aplicación Jira Sync + IA</h1>
+    <p>Guía funcional y técnica para usuarios, administradores y programadores.</p>
+
+    <div class="meta">
+      <span class="pill">Jira Cloud</span>
+      <span class="pill">OpenAI</span>
+      <span class="pill">Teams</span>
+      <span class="pill">SMTP</span>
+      <span class="pill">Twilio</span>
+      <span class="pill">PHP + MySQL/MariaDB</span>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div class="layout">
+
+    <nav>
+      <h2>Índice</h2>
+      <a href="#intro">1. Introducción</a>
+      <a href="#arquitectura">2. Arquitectura</a>
+      <a href="#auth">3. Autenticación</a>
+      <a href="#dashboard">4. Página inicial</a>
+      <a href="#issues">5. Incidencias</a>
+      <a href="#sync">6. Sincronización Jira</a>
+      <a href="#jira">7. Cliente Jira</a>
+      <a href="#timeline">8. Timeline</a>
+      <a href="#edicion">9. Edición manual</a>
+      <a href="#ia-config">10. Configuración IA</a>
+      <a href="#informes-incidencia">11. Informes incidencia</a>
+      <a href="#alertas">12. Alertas</a>
+      <a href="#notificaciones">13. Notificaciones</a>
+      <a href="#informes-12h">14. Informes 12H</a>
+      <a href="#informes-cierre">15. Informes cierre</a>
+      <a href="#pantalla-informes">16. Pantalla informes</a>
+      <a href="#usuarios">17. Usuarios</a>
+      <a href="#config">18. Configuración</a>
+      <a href="#bbdd">19. Base de datos</a>
+      <a href="#apis">20. APIs externas</a>
+      <a href="#mapa">21. Mapa de archivos</a>
+    </nav>
+
+    <div>
+
+      <section id="intro">
+        <h2>1. Introducción general</h2>
+        <p>
+          Esta aplicación permite sincronizar incidencias desde Jira Cloud,
+          almacenarlas en una base de datos local y analizarlas mediante IA.
+        </p>
+
+        <div class="grid">
+          <div class="card-mini">
+            <h4>Funcionalidades principales</h4>
+            <ul>
+              <li>Dashboard inicial.</li>
+              <li>Timeline de incidencias.</li>
+              <li>Alertas críticas.</li>
+              <li>Informes IA.</li>
+              <li>Gestión de usuarios.</li>
+            </ul>
+          </div>
+
+          <div class="card-mini">
+            <h4>Integraciones</h4>
+            <ul>
+              <li>Jira Cloud REST API.</li>
+              <li>OpenAI API.</li>
+              <li>Teams / Power Automate.</li>
+              <li>SMTP.</li>
+              <li>Twilio Voice API.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section id="arquitectura">
+        <h2>2. Arquitectura general</h2>
+
+        <h3>Flujo general</h3>
+        <pre><code>Jira Cloud
+   ↓
+Servicios PHP
+   ↓
+Base de datos MySQL/MariaDB
+   ↓
+Endpoints public/api
+   ↓
+Páginas PHP + JavaScript
+   ↓
+Usuario</code></pre>
+
+        <h3>Capas</h3>
+        <ul>
+          <li><code>public/*.php</code>: páginas visuales.</li>
+          <li><code>public/api/*.php</code>: endpoints HTTP.</li>
+          <li><code>app/services/*.php</code>: lógica de negocio.</li>
+          <li><code>app/models/*.php</code>: acceso a base de datos.</li>
+          <li><code>app/config/*.php</code>: configuración.</li>
+          <li><code>app/helpers/*.php</code>: autenticación y utilidades.</li>
+        </ul>
+      </section>
+
+      <section id="auth">
+        <h2>3. Autenticación, roles y navegación</h2>
+
+        <p>
+          La aplicación usa sesión PHP y roles. Los roles actuales son:
+          <code>admin</code> y <code>operador</code>.
+        </p>
+
+        <h3>Archivos implicados</h3>
+        <pre><code>public/login.php
+public/logout.php
+public/partials/navbar.php
+app/helpers/Auth.php
+app/models/UserModel.php</code></pre>
+
+        <h3>Flujo de login</h3>
+        <pre><code>Usuario abre login.php
+   ↓
+Introduce usuario y contraseña
+   ↓
+login.php consulta users
+   ↓
+password_verify valida password_hash
+   ↓
+Auth.php guarda usuario en sesión
+   ↓
+Se redirige según rol</code></pre>
+
+        <h3>Redirección por rol</h3>
+        <pre><code>admin    → index.php
+operador → ai_alerts_page.php</code></pre>
+
+        <p>
+          La estructura visual del menú común está en
+          <code>public/partials/navbar.php</code>.
+        </p>
+      </section>
+
+      <section id="dashboard">
+        <h2>4. Página inicial / Dashboard principal</h2>
+
+        <p>
+          La página inicial muestra el estado general de la cola de incidencias.
+        </p>
+
+        <h3>Archivo visual</h3>
+        <pre><code>public/index.php</code></pre>
+
+        <h3>APIs usadas</h3>
+        <pre><code>./api/dashboard.php
+./api/issues.php
+./api/sync.php
+./api/jira_update_issue.php</code></pre>
+
+        <h3>Flujo dashboard</h3>
+        <pre><code>index.php
+   ↓ loadDashboard()
+GET public/api/dashboard.php
+   ↓
+snapshots
+   ↓
+último snapshot + anterior
+   ↓
+calcula diferencias
+   ↓
+index.php pinta tarjetas</code></pre>
+
+        <h3>Botón Sincronizar ahora</h3>
+        <pre><code>Botón Sincronizar ahora
+   ↓
+public/api/sync.php?full=1
+   ↓
+SyncService->runSync(true)
+   ↓
+Jira Cloud
+   ↓
+issues / snapshots / issue_timeline / ai_closure_reports</code></pre>
+      </section>
+
+      <section id="issues">
+        <h2>5. Incidencias</h2>
+
+        <h3>Endpoint</h3>
+        <pre><code>public/api/issues.php</code></pre>
+
+        <p>
+          Permite listar incidencias con filtros y obtener el detalle de una
+          incidencia mediante <code>?key=LIP-XX</code>.
+        </p>
+
+        <h3>Filtros soportados</h3>
+        <pre><code>estado
+prioridad
+project
+q
+limit
+offset</code></pre>
+
+        <h3>Tabla origen</h3>
+        <pre><code>issues</code></pre>
+      </section>
+
+      <section id="sync">
+        <h2>6. Sincronización Jira → Base de datos</h2>
+
+        <p>
+          La sincronización trae incidencias desde Jira Cloud, actualiza la tabla
+          local, genera snapshots, registra timeline y puede generar informes de
+          cierre.
+        </p>
+
+        <h3>Archivos</h3>
+        <pre><code>public/api/sync.php
+app/services/SyncService.php
+app/services/JiraService.php
+app/models/IssueModel.php
+app/services/SnapshotService.php
+app/services/IssueTimelineService.php
+app/services/ClosureReportService.php</code></pre>
+
+        <h3>Flujo completo</h3>
+        <pre><code>public/api/sync.php
+   ↓
+SyncService->runSync($full)
+   ↓
+IssueModel->getLastSyncTime()
+   ↓
+SyncService->buildIncrementalJql()
+   ↓
+JiraService->paginateAll()
+   ↓
+IssueModel->upsertBatchFromJiraIssues()
+   ↓
+IssueModel->setLastSyncTime()
+   ↓
+reconciliación de borrados
+   ↓
+SnapshotService->createSnapshot()
+   ↓
+IssueTimelineService->storeSnapshotStateIfStatusChanged()
+   ↓
+ClosureReportService->generateReport() si hay cierres nuevos</code></pre>
+
+        <h3>Campos pedidos a Jira</h3>
+        <pre><code>id
+key
+summary
+status
+assignee
+updated
+created
+project
+priority
+customfield_10041 → Urgency
+customfield_10004 → Impact</code></pre>
+      </section>
+
+      <section id="jira">
+        <h2>7. Cliente Jira</h2>
+
+        <h3>Archivo</h3>
+        <pre><code>app/services/JiraService.php</code></pre>
+
+        <p>
+          Usa Jira Cloud REST API v3 y el endpoint:
+          <code>/rest/api/3/search/jql</code>.
+        </p>
+
+        <h3>Paginación</h3>
+        <pre><code>nextPageToken</code></pre>
+
+        <p>
+          La autenticación se hace con Basic Auth usando
+          <code>JIRA_EMAIL</code> y <code>JIRA_API_TOKEN</code>.
+        </p>
+      </section>
+
+      <section id="timeline">
+        <h2>8. Timeline de incidencias</h2>
+
+        <p>
+          Muestra la evolución de estados en bloques de 15 minutos.
+        </p>
+
+        <h3>Archivos</h3>
+        <pre><code>public/timeline_page.php
+public/api/timeline.php
+public/api/jira_TLissue.php
+app/services/IssueTimelineService.php</code></pre>
+
+        <h3>Flujo visual</h3>
+        <pre><code>timeline_page.php
+   ↓ loadTimeline()
+GET public/api/timeline.php?from=...&to=...
+   ↓
+issue_timeline + issues
+   ↓
+agrupa por jira_key
+   ↓
+normaliza cierres como Completado
+   ↓
+devuelve slots de 15 minutos
+   ↓
+timeline_page.php pinta tabla de colores</code></pre>
+
+        <h3>Estados visuales</h3>
+        <pre><code>Abierta
+Escalated
+Work in progress
+Pending
+Waiting for approval
+Esperando por el cliente
+Completado</code></pre>
+      </section>
+
+      <section id="edicion">
+        <h2>9. Edición manual de incidencias</h2>
+
+        <p>
+          Permite editar incidencias desde la página inicial y desde timeline.
+        </p>
+
+        <h3>Endpoint y servicio</h3>
+        <pre><code>public/api/jira_update_issue.php
+app/services/JiraIssueMutationService.php</code></pre>
+
+        <h3>Flujo POST</h3>
+        <pre><code>POST public/api/jira_update_issue.php
+   ↓
+JiraIssueMutationService->applyManualEdit()
+   ↓
+PUT Jira /issue/{key}
+   ↓
+POST Jira /issue/{key}/transitions si cambia estado
+   ↓
+GET Jira /issue/{key}
+   ↓
+IssueModel->upsertBatchFromJiraIssues()
+   ↓
+IssueTimelineService->appendEvent()</code></pre>
+
+        <h3>Eventos timeline</h3>
+        <pre><code>summary_change
+priority_change
+assignee_change
+status_change
+source = app</code></pre>
+      </section>
+
+      <section id="ia-config">
+        <h2>10. Configuración global de IA</h2>
+
+        <h3>Archivos</h3>
+        <pre><code>public/ai_config.php
+public/api/ai_settings.php
+app/models/AiSettingsModel.php</code></pre>
+
+        <h3>Tabla</h3>
+        <pre><code>ai_settings</code></pre>
+
+        <h3>Campos</h3>
+        <pre><code>prompt_general
+def_incidencia_critica
+language
+provider
+model
+is_active</code></pre>
+
+        <p>
+          El prompt general y la definición de incidencia crítica se usan en:
+          <code>AiAnalysisService::buildPrompts()</code>.
+        </p>
+      </section>
+
+      <section id="informes-incidencia">
+        <h2>11. Informes IA de incidencias</h2>
+
+        <p>
+          Analizan incidencias visibles y detectan críticas según la
+          configuración IA.
+        </p>
+
+        <h3>Archivos</h3>
+        <pre><code>public/ai_reports_page.php
+public/api/ai_generate_report.php
+app/services/AiAnalysisService.php
+app/services/OpenAiProviderService.php
+app/models/AiReportModel.php</code></pre>
+
+        <h3>Tablas</h3>
+        <pre><code>ai_reports
+ai_report_issues</code></pre>
+
+        <h3>Flujo</h3>
+        <pre><code>Usuario pulsa Generar informe incidencia
+   ↓
+public/api/ai_generate_report.php
+   ↓
+AiAnalysisService->generate()
+   ↓
+AiSettingsModel->getActiveSettings()
+   ↓
+SELECT issues WHERE visible = 1
+   ↓
+AiReportModel->createPendingReport()
+   ↓
+AiAnalysisService->buildPrompts()
+   ↓
+OpenAiProviderService->analyze()
+   ↓
+OpenAI API
+   ↓
+AiReportModel->markCompleted()
+   ↓
+AiReportModel->saveIssueAnalyses()
+   ↓
+AlertNotificationService->notifyNewAlertsForReport()</code></pre>
+
+        <h3>Dónde está el prompt</h3>
+        <pre><code>app/services/AiAnalysisService.php
+private function buildPrompts(array $cfg, array $issues): array</code></pre>
+
+        <h3>Contenido enviado</h3>
+        <pre><code>PROMPT:
+{prompt_general}
+
+CRÍTICAS:
+{def_incidencia_critica}
+
+INCIDENCIAS:
+{JSON de incidencias visibles}</code></pre>
+      </section>
+
+      <section id="alertas">
+        <h2>12. Alertas críticas</h2>
+
+        <p>
+          Muestran incidencias que la IA marcó como críticas y que siguen sin
+          asignar.
+        </p>
+
+        <h3>Archivos</h3>
+        <pre><code>public/ai_alerts_page.php
+public/api/alerts.php
+public/api/claim_alert.php
+app/models/AiReportModel.php</code></pre>
+
+        <h3>Reglas</h3>
+        <ul>
+          <li>La última evaluación IA es crítica.</li>
+          <li>La incidencia está visible.</li>
+          <li>La incidencia no tiene asignado.</li>
+        </ul>
+
+        <h3>Coger incidencia</h3>
+        <pre><code>Operador pulsa Coger incidencia
+   ↓
+POST public/api/claim_alert.php
+   ↓
+lee usuario autenticado
+   ↓
+usa jira_account_id
+   ↓
+JiraIssueMutationService->applyManualEdit()
+   ↓
+asigna incidencia en Jira
+   ↓
+actualiza issues local
+   ↓
+registra assignee_change</code></pre>
+      </section>
+
+      <section id="notificaciones">
+        <h2>13. Notificaciones de alertas</h2>
+
+        <p>
+          Cuando se detectan nuevas alertas críticas, la app intenta avisar por
+          email, Teams y llamada telefónica.
+        </p>
+
+        <h3>Servicio</h3>
+        <pre><code>app/services/AlertNotificationsService.php</code></pre>
+
+        <h3>Flujo</h3>
+        <pre><code>AiAnalysisService termina informe
+   ↓
+AlertNotificationService->notifyNewAlertsForReport()
+   ↓
+getNewAlertsForReport()
+   ↓
+por cada alerta:
+      ↓
+      sendAlertEmailToAll()
+      ↓
+      sendAlertToTeams()
+      ↓
+      PhoneCallNotificationService->callUsersForAlert()
+      ↓
+      saveNotificationStatus()</code></pre>
+
+        <h3>Email</h3>
+        <pre><code>app/services/SmtpMailService.php
+SMTP_HOST
+SMTP_PORT
+SMTP_USERNAME
+SMTP_PASSWORD
+SMTP_FROM_EMAIL
+SMTP_FROM_NAME</code></pre>
+
+        <h3>Teams</h3>
+        <pre><code>TEAMS_WEBHOOK_URL
+Payload: { "text": "mensaje de alerta" }</code></pre>
+
+        <h3>Twilio</h3>
+        <pre><code>app/services/PhoneCallNotificationService.php
+TWILIO_ACCOUNT_SID
+TWILIO_AUTH_TOKEN
+TWILIO_PHONE_NUMBER
+TWILIO_TTS_LANGUAGE</code></pre>
+      </section>
+
+      <section id="informes-12h">
+        <h2>14. Informes 12H</h2>
+
+        <p>
+          Generan un informe ejecutivo de evolución de cola en el último bloque
+          cerrado.
+        </p>
+
+        <h3>Archivos</h3>
+        <pre><code>public/api/generate_queue_report.php
+app/services/QueueReportService.php
+public/ai_reports_page.php</code></pre>
+
+        <h3>Tabla</h3>
+        <pre><code>ai_queue_reports</code></pre>
+
+        <h3>Flujo</h3>
+        <pre><code>Usuario pulsa Generar informe 12H
+   ↓
+generate_queue_report.php
+   ↓
+QueueReportService->generateReport('manual_button')
+   ↓
+getClosedPeriod()
+   ↓
+calculateMetrics()
+   ↓
+getPreviousPeriodMetrics()
+   ↓
+compareWithPrevious()
+   ↓
+buildAiPayload()
+   ↓
+buildPrompt()
+   ↓
+callOpenAI()
+   ↓
+markCompleted()</code></pre>
+
+        <h3>Dónde está el prompt</h3>
+        <pre><code>app/services/QueueReportService.php
+private function buildPrompt(array $payload): string</code></pre>
+
+        <h3>Estructura solicitada</h3>
+        <pre><code>1. Resumen ejecutivo
+2. Estado general de la cola
+3. Evolución entrantes vs resueltas
+4. Identificación de problemas
+5. Anomalías detectadas
+6. Riesgos
+7. Recomendaciones accionables</code></pre>
+      </section>
+
+      <section id="informes-cierre">
+        <h2>15. Informes de cierre</h2>
+
+        <p>
+          Evalúan la calidad del proceso de cierre de una incidencia usando su
+          timeline.
+        </p>
+
+        <h3>Archivos</h3>
+        <pre><code>public/api/generate_closure_report.php
+app/services/ClosureReportService.php
+app/services/SyncService.php
+public/ai_reports_page.php</code></pre>
+
+        <h3>Tabla</h3>
+        <pre><code>ai_closure_reports</code></pre>
+
+        <h3>Flujo</h3>
+        <pre><code>Cierre detectado o generación manual
+   ↓
+ClosureReportService->generateReport()
+   ↓
+getIssue()
+   ↓
+getTimeline()
+   ↓
+createPendingReport()
+   ↓
+analyzeTimeline()
+   ↓
+buildAiPayload()
+   ↓
+buildPrompt()
+   ↓
+callOpenAI()
+   ↓
+extractRating()
+   ↓
+markCompleted()</code></pre>
+
+        <h3>Dónde está el prompt</h3>
+        <pre><code>app/services/ClosureReportService.php
+private function buildPrompt(array $payload): string</code></pre>
+
+        <h3>Estructura solicitada</h3>
+        <pre><code>- Rating global entre 1 y 10, formato Rating: X/10
+- Resumen ejecutivo
+- Puntos positivos
+- Carencias
+- Recomendaciones
+- Flujo ideal</code></pre>
+      </section>
+
+      <section id="pantalla-informes">
+        <h2>16. Pantalla de informes</h2>
+
+        <h3>Archivo visual</h3>
+        <pre><code>public/ai_reports_page.php</code></pre>
+
+        <h3>Endpoints</h3>
+        <pre><code>public/api/ai_reports.php
+public/api/ai_report_detail.php</code></pre>
+
+        <h3>Tipos soportados</h3>
+        <pre><code>incidencia
+12h
+closure</code></pre>
+
+        <h3>Funciones visuales</h3>
+        <pre><code>buildReportContentHtml()        → informe incidencia
+buildQueueReportContentHtml()   → informe 12H
+buildClosureReportContentHtml() → informe cierre</code></pre>
+      </section>
+
+      <section id="usuarios">
+        <h2>17. Gestión de usuarios</h2>
+
+        <h3>Archivo visual</h3>
+        <pre><code>public/admin_users_page.php</code></pre>
+
+        <h3>Endpoints</h3>
+        <pre><code>public/api/admin_users.php
+public/api/admin_create_user.php
+public/api/admin_update_user.php</code></pre>
+
+        <h3>Servicios y modelos</h3>
+        <pre><code>app/models/UserModel.php
+app/services/JiraUserProvisionService.php
+app/services/SmtpMailService.php</code></pre>
+
+        <h3>Crear usuario</h3>
+        <pre><code>admin_users_page.php
+   ↓
+admin_create_user.php
+   ↓
+JiraUserProvisionService->registerUser()
+   ↓
+POST Jira /rest/api/3/user
+   ↓
+resuelve accountId
+   ↓
+UserModel->createUser()
+   ↓
+envía email login
+   ↓
+envía email Teams si hay URL</code></pre>
+
+        <h3>Reglas</h3>
+        <ul>
+          <li>No puedes desactivarte a ti mismo.</li>
+          <li>Debe quedar al menos 1 admin activo.</li>
+          <li>Debe quedar al menos 1 usuario activo con llamadas habilitadas.</li>
+          <li>Si las llamadas están activadas, el teléfono es obligatorio.</li>
+        </ul>
+      </section>
+
+      <section id="config">
+        <h2>18. Configuración global</h2>
+
+        <h3>Archivos</h3>
+        <pre><code>app/config/constants.php
+app/config/database.php
+app/config/jira.php
+app/helpers/Auth.php
+app/helpers/Utils.php</code></pre>
+
+        <h3>Variables principales</h3>
+        <pre><code>DB_HOST
+DB_PORT
+DB_NAME
+DB_USER
+DB_PASS
+JIRA_SITE
+JIRA_EMAIL
+JIRA_API_TOKEN
+JIRA_PROJECT_KEY
+OPENAI_API_KEY
+SMTP_HOST
+SMTP_PORT
+SMTP_USERNAME
+SMTP_PASSWORD
+TEAMS_WEBHOOK_URL
+TWILIO_ACCOUNT_SID
+TWILIO_AUTH_TOKEN
+TWILIO_PHONE_NUMBER</code></pre>
+      </section>
+
+      <section id="bbdd">
+        <h2>19. Base de datos</h2>
+
+        <h3>Tablas actuales</h3>
+        <pre><code>ai_closure_reports
+ai_queue_reports
+ai_report_issues
+ai_reports
+ai_settings
+alert_notifications
+alert_phone_notifications
+issue_timeline
+issues
+priority_map
+snapshots
+status_map
+sync_metadata
+users</code></pre>
+
+        <ul>
+          <li><code>issues</code>: incidencias sincronizadas desde Jira.</li>
+          <li><code>snapshots</code>: fotos agregadas de cola.</li>
+          <li><code>issue_timeline</code>: histórico de eventos.</li>
+          <li><code>ai_reports</code> y <code>ai_report_issues</code>: informes IA de incidencias.</li>
+          <li><code>ai_queue_reports</code>: informes 12H.</li>
+          <li><code>ai_closure_reports</code>: informes de cierre.</li>
+          <li><code>alert_notifications</code>: registro de email/Teams.</li>
+          <li><code>alert_phone_notifications</code>: registro de llamadas.</li>
+          <li><code>users</code>: usuarios locales.</li>
+        </ul>
+      </section>
+
+      <section id="apis">
+        <h2>20. APIs externas utilizadas</h2>
+
+        <h3>Jira Cloud REST API</h3>
+        <ul>
+          <li>Buscar incidencias.</li>
+          <li>Editar incidencias.</li>
+          <li>Cambiar estado.</li>
+          <li>Obtener transiciones.</li>
+          <li>Crear/invitar usuarios.</li>
+          <li>Buscar accountId.</li>
+        </ul>
+
+        <h3>OpenAI API</h3>
+        <pre><code>https://api.openai.com/v1/chat/completions</code></pre>
+
+        <p>
+          Usada en informes de incidencias, informes 12H e informes de cierre.
+        </p>
+
+        <h3>Teams / Power Automate</h3>
+        <pre><code>TEAMS_WEBHOOK_URL</code></pre>
+
+        <h3>SMTP</h3>
+        <p>
+          Usado para alertas por email, confirmación de alta e invitación a Teams.
+        </p>
+
+        <h3>Twilio Voice API</h3>
+        <pre><code>https://api.twilio.com/2010-04-01/Accounts/{SID}/Calls.json</code></pre>
+      </section>
+
+      <section id="mapa">
+        <h2>21. Mapa rápido de archivos</h2>
+
+        <h3>Páginas visuales</h3>
+        <ul class="file-list">
+          <li><code>public/index.php</code> → página inicial</li>
+          <li><code>public/timeline_page.php</code> → timeline</li>
+          <li><code>public/ai_alerts_page.php</code> → alertas</li>
+          <li><code>public/ai_reports_page.php</code> → informes</li>
+          <li><code>public/ai_config.php</code> → configuración IA</li>
+          <li><code>public/admin_users_page.php</code> → usuarios</li>
+          <li><code>public/login.php</code> → login</li>
+          <li><code>public/logout.php</code> → logout</li>
+          <li><code>public/partials/navbar.php</code> → navbar</li>
+        </ul>
+
+        <h3>Servicios principales</h3>
+        <ul class="file-list">
+          <li><code>SyncService.php</code> → sincronización</li>
+          <li><code>JiraService.php</code> → búsquedas Jira</li>
+          <li><code>SnapshotService.php</code> → snapshots</li>
+          <li><code>IssueTimelineService.php</code> → timeline</li>
+          <li><code>JiraIssueMutationService.php</code> → edición Jira</li>
+          <li><code>AiAnalysisService.php</code> → informe incidencia</li>
+          <li><code>OpenAiProviderService.php</code> → cliente OpenAI</li>
+          <li><code>QueueReportService.php</code> → informes 12H</li>
+          <li><code>ClosureReportService.php</code> → informes cierre</li>
+          <li><code>AlertNotificationsService.php</code> → notificaciones</li>
+          <li><code>PhoneCallNotificationService.php</code> → Twilio</li>
+          <li><code>SmtpMailService.php</code> → SMTP</li>
+          <li><code>JiraUserProvisionService.php</code> → alta usuarios</li>
+        </ul>
+
+        <div class="note">
+          <strong>Regla de mantenimiento:</strong>
+          la estructura visual está en <code>public/*.php</code>,
+          la lógica de negocio en <code>app/services/*.php</code>
+          y el acceso a datos en <code>app/models/*.php</code>.
+        </div>
+      </section>
+
+    </div>
+  </div>
+</main>
+</body>
+</html>
