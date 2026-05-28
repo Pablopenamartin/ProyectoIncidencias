@@ -16,3 +16,9 @@ CREATE TABLE ai_closure_reports (
     completed_at DATETIME,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
+
+
+ALTER TABLE ai_closure_reports
+ADD COLUMN status ENUM('pending','completed','failed') NOT NULL DEFAULT 'pending' AFTER jira_key,
+ADD COLUMN error_message TEXT NULL AFTER raw_response_json;

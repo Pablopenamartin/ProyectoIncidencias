@@ -11,11 +11,14 @@
  * ✅ Actualiza issues_last_sync en sync_metadata
  * ✅ Genera snapshot agregado en snapshots
  * ✅ Registra cambios reales de estado en issue_timeline
+ * ✅ Detecta incidencias borradas forzosamente de Jira
+ * ✅ Genera automáticamente informes de cierre cuando una incidencia pasa a cerrada
  *
  * IMPORTANTE:
  * - Se capturan los estados previos ANTES del UPSERT
  * - issue_timeline solo registra cambios reales en esta sync
  * - La sync manual se mantiene como reconciliación
+ * - Los informes de cierre se generan solo cuando se detecta un cierre nuevo
  */
 
 require_once __DIR__ . '/../config/constants.php';
@@ -25,11 +28,12 @@ require_once __DIR__ . '/../models/IssueModel.php';
 require_once __DIR__ . '/JiraService.php';
 require_once __DIR__ . '/SnapshotService.php';
 require_once __DIR__ . '/IssueTimelineService.php';
+require_once __DIR__ . '/ClosureReportService.php';
 
 class SyncService
 {
     /**
-     * Ejecuta la sincronización Jira → BD
+     * Ejecuta la sincronización Jira → BD.
      *
      * @param bool $full Si es true, ignora incremental y hace FULL SYNC
      * @return array
@@ -158,10 +162,8 @@ class SyncService
         //------------------------------------------------------
         // 8.b) Registrar en timeline las incidencias borradas
         //------------------------------------------------------
-        // OJO:
-        // - esto no reutiliza el método de cambios normales
-        // - en el siguiente paso añadiremos el método concreto
-        //   en IssueTimelineService.php
+        // Estas incidencias se marcaron como Completado porque
+        // estaban visibles en local pero ya no existen en Jira.
         //------------------------------------------------------
         $timelineDeletedInserted = 0;
 
@@ -172,25 +174,36 @@ class SyncService
             );
         }
 
-
+        //------------------------------------------------------
+        // 8.c) Generar informes de cierre automáticos
+        //------------------------------------------------------
+        // REGLA:
+        // - Solo se generan para incidencias que en ESTA sync
+        //   han pasado de no cerradas a cerradas.
+        // - También cubre cierres por borrado forzado en Jira.
+        // - Si OpenAI falla, NO rompemos la sincronización.
+        //------------------------------------------------------
+        $closureReportStats = $this->generateClosureReportsForNewlyClosedIssues($prevStates);
 
         //------------------------------------------------------
         // 9) Respuesta final
         //------------------------------------------------------
         return [
-            'ok'                    => true,
-            'jql'                   => $jql,
-            'fetched'               => $totalFetched,
-            'inserted'              => $totalInserted,
-            'deleted_closed'        => $deletedClosed,
-            'snapshot_id'           => $snapshotId,
-            'timeline_inserted'     => $timelineInserted,
-            'timeline_deleted'      => $timelineDeletedInserted,
-            'last_sync_time'        => $now
+            'ok'                        => true,
+            'jql'                       => $jql,
+            'fetched'                   => $totalFetched,
+            'inserted'                  => $totalInserted,
+            'deleted_closed'            => $deletedClosed,
+            'snapshot_id'               => $snapshotId,
+            'timeline_inserted'         => $timelineInserted,
+            'timeline_deleted'          => $timelineDeletedInserted,
+            'closure_reports_generated' => $closureReportStats['generated'],
+            'closure_reports_failed'    => $closureReportStats['failed'],
+            'last_sync_time'            => $now
         ];
     }
 
-/**
+    /**
      * getCurrentVisibleIssueRows()
      * -------------------------------------------------------
      * Devuelve el estado actual completo de las incidencias visibles
@@ -206,20 +219,7 @@ class SyncService
      */
     private function getCurrentVisibleIssueRows(): array
     {
-        $pdo = new PDO(
-            sprintf(
-                "mysql:host=%s;port=%s;dbname=%s;charset=utf8mb4",
-                env('DB_HOST'),
-                env('DB_PORT'),
-                env('DB_NAME')
-            ),
-            env('DB_USER'),
-            env('DB_PASS'),
-            [
-                PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
-                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-            ]
-        );
+        $pdo = $this->createPdo();
 
         $sql = "
             SELECT
@@ -309,20 +309,7 @@ class SyncService
             return 0;
         }
 
-        $pdo = new PDO(
-            sprintf(
-                "mysql:host=%s;port=%s;dbname=%s;charset=utf8mb4",
-                env('DB_HOST'),
-                env('DB_PORT'),
-                env('DB_NAME')
-            ),
-            env('DB_USER'),
-            env('DB_PASS'),
-            [
-                PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
-                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-            ]
-        );
+        $pdo = $this->createPdo();
 
         $placeholders = implode(',', array_fill(0, count($jiraKeys), '?'));
 
@@ -342,6 +329,209 @@ class SyncService
         return $st->rowCount();
     }
 
+    /**
+     * generateClosureReportsForNewlyClosedIssues()
+     * -------------------------------------------------------
+     * Genera automáticamente informes de cierre para incidencias
+     * que han pasado a cerradas en ESTA sincronización.
+     *
+     * REGLA:
+     * - Busca incidencias actualmente cerradas.
+     * - Compara contra el estado previo capturado antes del UPSERT.
+     * - Solo genera informe si:
+     *   1) antes NO estaba cerrada
+     *   2) ahora SÍ está cerrada
+     *   3) no existe ya un informe de cierre para esa jira_key
+     *
+     * IMPORTANTE:
+     * - Si falla OpenAI o el servicio de cierre, no se rompe la sync.
+     * - Devuelve contadores para trazabilidad.
+     *
+     * @param array $prevStates Mapa jira_key => status_name antes de la sync
+     * @return array
+     */
+    private function generateClosureReportsForNewlyClosedIssues(array $prevStates): array
+    {
+        $pdo = $this->createPdo();
+
+        $sql = "
+            SELECT
+                id,
+                jira_key,
+                summary,
+                status_name,
+                estado_categoria,
+                visible,
+                updated_at
+            FROM issues
+            WHERE
+                estado_categoria = 'cerrado_unificado'
+                OR LOWER(status_name) IN (
+                    'completado',
+                    'completed',
+                    'closed',
+                    'done',
+                    'resolved',
+                    'resuelto',
+                    'cancelled',
+                    'canceled'
+                )
+            ORDER BY updated_at DESC
+        ";
+
+        $closedIssues = $pdo->query($sql)->fetchAll() ?: [];
+
+        if (empty($closedIssues)) {
+            return [
+                'generated' => 0,
+                'failed'    => 0,
+            ];
+        }
+
+        $closureService = new ClosureReportService($pdo);
+
+        $generated = 0;
+        $failed = 0;
+
+        foreach ($closedIssues as $issue) {
+            $jiraKey = (string)($issue['jira_key'] ?? '');
+            $issueId = (int)($issue['id'] ?? 0);
+
+            if ($jiraKey === '' || $issueId <= 0) {
+                continue;
+            }
+
+            /**
+             * Estado anterior capturado antes de la sync.
+             * Si no existía antes, no generamos automáticamente para evitar
+             * crear informes de cierre de incidencias históricas importadas.
+             */
+            $previousStatus = $prevStates[$jiraKey] ?? null;
+
+            if ($previousStatus === null) {
+                continue;
+            }
+
+            /**
+             * Solo nos interesan las que antes NO estaban cerradas.
+             */
+            if ($this->isClosedStatus($previousStatus)) {
+                continue;
+            }
+
+            /**
+             * Seguridad extra:
+             * Si ya existe informe de cierre para esta incidencia, no duplicamos.
+             */
+            if ($this->hasClosureReportForJiraKey($jiraKey)) {
+                continue;
+            }
+
+            try {
+                $closureService->generateReport($issueId, 'auto_sync');
+                $generated++;
+            } catch (Throwable $t) {
+                /**
+                 * No lanzamos excepción.
+                 * La sincronización de Jira no debe fallar porque falle la IA.
+                 */
+                $failed++;
+            }
+        }
+
+        return [
+            'generated' => $generated,
+            'failed'    => $failed,
+        ];
+    }
+
+    /**
+     * hasClosureReportForJiraKey()
+     * -------------------------------------------------------
+     * Comprueba si ya existe un informe de cierre para una incidencia.
+     *
+     * QUÉ EVITA:
+     * - Duplicar informes de cierre en cada sync.
+     *
+     * @param string $jiraKey Clave Jira
+     * @return bool
+     */
+    private function hasClosureReportForJiraKey(string $jiraKey): bool
+    {
+        $pdo = $this->createPdo();
+
+        $sql = "
+            SELECT id
+            FROM ai_closure_reports
+            WHERE jira_key COLLATE utf8mb4_unicode_ci = :jira_key COLLATE utf8mb4_unicode_ci
+            LIMIT 1
+        ";
+
+        $st = $pdo->prepare($sql);
+        $st->execute([
+            ':jira_key' => $jiraKey,
+        ]);
+
+        return (bool)$st->fetchColumn();
+    }
+
+    /**
+     * isClosedStatus()
+     * -------------------------------------------------------
+     * Determina si un estado debe considerarse cerrado.
+     *
+     * @param string|null $status Estado Jira
+     * @return bool
+     */
+    private function isClosedStatus(?string $status): bool
+    {
+        $s = strtolower(trim((string)$status));
+
+        if ($s === '') {
+            return false;
+        }
+
+        return in_array($s, [
+            'completado',
+            'completed',
+            'closed',
+            'done',
+            'resolved',
+            'resuelto',
+            'cancelled',
+            'canceled',
+            'cancelado',
+        ], true);
+    }
+
+    /**
+     * createPdo()
+     * -------------------------------------------------------
+     * Crea una conexión PDO local para métodos internos.
+     *
+     * NOTA:
+     * - Se mantiene este helper porque esta clase ya usaba conexiones
+     *   locales en varios métodos.
+     *
+     * @return PDO
+     */
+    private function createPdo(): PDO
+    {
+        return new PDO(
+            sprintf(
+                "mysql:host=%s;port=%s;dbname=%s;charset=utf8mb4",
+                env('DB_HOST'),
+                env('DB_PORT'),
+                env('DB_NAME')
+            ),
+            env('DB_USER'),
+            env('DB_PASS'),
+            [
+                PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            ]
+        );
+    }
 
     /**
      * buildIncrementalJql()
