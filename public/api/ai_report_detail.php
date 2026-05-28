@@ -3,18 +3,30 @@
  * public/api/ai_report_detail.php
  * =========================================================
  * FUNCIÓN GENERAL DEL ARCHIVO:
- * Endpoint para obtener detalle de informes IA.
+ * Endpoint para obtener el detalle de informes IA y ejecutar
+ * acciones manuales sobre ellos.
+ *
+ * TIPOS DE INFORME SOPORTADOS:
+ * - incidencia:
+ *   Lee de ai_reports + ai_report_issues.
+ *
+ * - 12h:
+ *   Lee de ai_queue_reports.
+ *
+ * - closure:
+ *   Lee de ai_closure_reports.
  *
  * RELACIÓN CON OTROS ARCHIVOS:
  * - Usa Auth.php para restringir acceso a administradores.
  * - Usa Utils.php para respuestas JSON homogéneas.
+ * - Usa database.php para conexión PDO.
  * - Usa AiReportModel.php para informes de incidencia.
- * - Usa database.php para consultar informes 12H en ai_queue_reports.
  *
  * FUNCIONES PRINCIPALES:
  * - GET:
  *   - type=incidencia -> detalle desde ai_reports + ai_report_issues
  *   - type=12h        -> detalle desde ai_queue_reports
+ *   - type=closure    -> detalle desde ai_closure_reports
  *
  * - POST:
  *   - action=mark_completed
@@ -39,6 +51,11 @@ auth_require_api_role('admin');
  * --------------------------------------------------------------
  * Lee el body JSON de una petición POST.
  *
+ * QUÉ HACE:
+ * - Lee php://input
+ * - Decodifica JSON como array asociativo
+ * - Devuelve array vacío si no hay JSON válido
+ *
  * @return array
  */
 function readJsonBodyAiReportDetail(): array
@@ -52,6 +69,30 @@ function readJsonBodyAiReportDetail(): array
     $json = json_decode($raw, true);
 
     return is_array($json) ? $json : [];
+}
+
+/**
+ * normalizeReportType
+ * --------------------------------------------------------------
+ * Normaliza el tipo de informe recibido desde frontend.
+ *
+ * TIPOS VÁLIDOS:
+ * - incidencia
+ * - 12h
+ * - closure
+ *
+ * @param string $type Tipo recibido
+ * @return string Tipo normalizado
+ */
+function normalizeReportType(string $type): string
+{
+    $type = strtolower(trim($type));
+
+    if (in_array($type, ['incidencia', '12h', 'closure'], true)) {
+        return $type;
+    }
+
+    return 'incidencia';
 }
 
 /**
@@ -109,9 +150,85 @@ function getQueueReportById(PDO $pdo, int $reportId): ?array
 }
 
 /**
+ * getClosureReportById
+ * --------------------------------------------------------------
+ * Recupera el detalle completo de un informe de cierre.
+ *
+ * QUÉ DEVUELVE:
+ * - id
+ * - issue_id
+ * - jira_key
+ * - status
+ * - rating
+ * - report_summary
+ * - report_text
+ * - raw_response_json
+ * - error_message
+ * - fechas
+ *
+ * @param PDO $pdo Conexión PDO
+ * @param int $reportId ID del informe de cierre
+ * @return array|null
+ */
+function getClosureReportById(PDO $pdo, int $reportId): ?array
+{
+    $sql = "
+        SELECT
+            cr.id,
+
+            CONCAT(
+                'Informe cierre ',
+                cr.jira_key,
+                ' · Rating ',
+                IFNULL(cr.rating, 'N/A'),
+                '/10'
+            ) AS report_name,
+
+            cr.issue_id,
+            cr.jira_key,
+            cr.status,
+            'closure' AS report_type,
+
+            'openai' AS provider,
+            NULL AS model,
+
+            0 AS total_issues_analyzed,
+            IFNULL(cr.rating, 0) AS total_critical_detected,
+
+            cr.rating,
+            cr.report_summary,
+            cr.report_text,
+            cr.raw_response_json,
+            cr.error_message,
+            cr.trigger_source,
+
+            NULL AS sync_reference_time,
+
+            cr.started_at,
+            cr.completed_at,
+            cr.created_at
+        FROM ai_closure_reports cr
+        WHERE cr.id = :id
+        LIMIT 1
+    ";
+
+    $st = $pdo->prepare($sql);
+    $st->execute([
+        ':id' => $reportId
+    ]);
+
+    $row = $st->fetch();
+
+    return $row ?: null;
+}
+
+/**
  * markQueueReportCompletedManually
  * --------------------------------------------------------------
  * Marca manualmente un informe 12H como completed.
+ *
+ * NOTA:
+ * - No borra error_message.
  *
  * @param PDO $pdo Conexión PDO
  * @param int $reportId ID del informe 12H
@@ -133,17 +250,45 @@ function markQueueReportCompletedManually(PDO $pdo, int $reportId): void
     ]);
 }
 
+/**
+ * markClosureReportCompletedManually
+ * --------------------------------------------------------------
+ * Marca manualmente un informe de cierre como completed.
+ *
+ * NOTA:
+ * - No borra error_message.
+ *
+ * @param PDO $pdo Conexión PDO
+ * @param int $reportId ID del informe de cierre
+ * @return void
+ */
+function markClosureReportCompletedManually(PDO $pdo, int $reportId): void
+{
+    $sql = "
+        UPDATE ai_closure_reports
+        SET
+            status = 'completed',
+            completed_at = NOW()
+        WHERE id = :id
+    ";
+
+    $st = $pdo->prepare($sql);
+    $st->execute([
+        ':id' => $reportId
+    ]);
+}
+
 try {
     $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
     $pdo = getPDO();
     $model = new AiReportModel();
 
-    //----------------------------------------------------------
-    // GET -> obtener detalle
-    //----------------------------------------------------------
+    // ----------------------------------------------------------
+    // GET -> obtener detalle del informe
+    // ----------------------------------------------------------
     if ($method === 'GET') {
         $reportId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
-        $type = strtolower(trim((string)($_GET['type'] ?? 'incidencia')));
+        $type = normalizeReportType((string)($_GET['type'] ?? 'incidencia'));
 
         if ($reportId <= 0) {
             json_response([
@@ -152,9 +297,9 @@ try {
             ], 400);
         }
 
-        //------------------------------------------------------
+        // ------------------------------------------------------
         // Detalle informe 12H
-        //------------------------------------------------------
+        // ------------------------------------------------------
         if ($type === '12h') {
             $report = getQueueReportById($pdo, $reportId);
 
@@ -173,9 +318,30 @@ try {
             ]);
         }
 
-        //------------------------------------------------------
+        // ------------------------------------------------------
+        // Detalle informe de cierre
+        // ------------------------------------------------------
+        if ($type === 'closure') {
+            $report = getClosureReportById($pdo, $reportId);
+
+            if (!$report) {
+                json_response([
+                    'ok'    => false,
+                    'error' => 'No existe el informe de cierre solicitado.'
+                ], 404);
+            }
+
+            json_response([
+                'ok'          => true,
+                'report_type' => 'closure',
+                'report'      => $report,
+                'issues'      => [],
+            ]);
+        }
+
+        // ------------------------------------------------------
         // Detalle informe incidencia
-        //------------------------------------------------------
+        // ------------------------------------------------------
         $report = $model->getReportById($reportId);
 
         if (!$report) {
@@ -195,9 +361,9 @@ try {
         ]);
     }
 
-    //----------------------------------------------------------
+    // ----------------------------------------------------------
     // POST -> acciones manuales
-    //----------------------------------------------------------
+    // ----------------------------------------------------------
     if ($method === 'POST') {
         $data = readJsonBodyAiReportDetail();
 
@@ -209,7 +375,7 @@ try {
         }
 
         $reportId = isset($data['id']) ? (int)$data['id'] : 0;
-        $type = strtolower(trim((string)($data['type'] ?? 'incidencia')));
+        $type = normalizeReportType((string)($data['type'] ?? 'incidencia'));
         $action = trim((string)($data['action'] ?? ''));
 
         if ($reportId <= 0) {
@@ -226,10 +392,14 @@ try {
             ], 400);
         }
 
-        //------------------------------------------------------
-        // Marcar como completed
-        //------------------------------------------------------
+        // ------------------------------------------------------
+        // Acción: marcar como completed
+        // ------------------------------------------------------
         if ($action === 'mark_completed') {
+
+            // --------------------------------------------------
+            // Marcar informe 12H
+            // --------------------------------------------------
             if ($type === '12h') {
                 $report = getQueueReportById($pdo, $reportId);
 
@@ -250,6 +420,32 @@ try {
                 ]);
             }
 
+            // --------------------------------------------------
+            // Marcar informe de cierre
+            // --------------------------------------------------
+            if ($type === 'closure') {
+                $report = getClosureReportById($pdo, $reportId);
+
+                if (!$report) {
+                    json_response([
+                        'ok'    => false,
+                        'error' => 'No existe el informe de cierre indicado.'
+                    ], 404);
+                }
+
+                markClosureReportCompletedManually($pdo, $reportId);
+
+                json_response([
+                    'ok'      => true,
+                    'message' => 'Informe de cierre marcado manualmente como completed.',
+                    'report'  => getClosureReportById($pdo, $reportId),
+                    'issues'  => [],
+                ]);
+            }
+
+            // --------------------------------------------------
+            // Marcar informe incidencia
+            // --------------------------------------------------
             $report = $model->getReportById($reportId);
 
             if (!$report) {
@@ -275,6 +471,9 @@ try {
         ], 400);
     }
 
+    // ----------------------------------------------------------
+    // Método no permitido
+    // ----------------------------------------------------------
     json_response([
         'ok'    => false,
         'error' => 'Método no permitido.'
